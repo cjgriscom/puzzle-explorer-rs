@@ -14,7 +14,7 @@ pub use worker::worker_handle_msg;
 
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
-use web_sys::HtmlCanvasElement;
+use web_sys::{Event, HtmlCanvasElement};
 
 /// Entry point for the web application.
 ///
@@ -28,17 +28,35 @@ pub async fn run_app(egui_canvas_id: String, three_canvas_id: String) -> Result<
         .ok_or(JsValue::from_str("No window"))?
         .document()
         .ok_or(JsValue::from_str("No document"))?;
-    let canvas = document
+
+    let egui_canvas = document
         .get_element_by_id(&egui_canvas_id)
         .ok_or(JsValue::from_str("No canvas found"))?
         .dyn_into::<HtmlCanvasElement>()
         .map_err(|_| JsValue::from_str("Element is not a canvas"))?;
 
+    let three_canvas = document
+        .get_element_by_id(&three_canvas_id)
+        .ok_or(JsValue::from_str("No three canvas found"))?
+        .dyn_into::<HtmlCanvasElement>()
+        .map_err(|_| JsValue::from_str("Element is not a canvas"))?;
+
+    // Prevent drag thumbnail from appearing when dragging the mouse over the canvas
+    for canvas in [&egui_canvas, &three_canvas] {
+        let _ = canvas.set_attribute("draggable", "false");
+        let on_drag_start = Closure::wrap(Box::new(|e: Event| {
+            e.prevent_default();
+        }) as Box<dyn FnMut(_)>);
+        let _ = canvas
+            .add_event_listener_with_callback("dragstart", on_drag_start.as_ref().unchecked_ref());
+        on_drag_start.forget();
+    }
+
     let web_options = eframe::WebOptions::default();
 
     eframe::WebRunner::new()
         .start(
-            canvas,
+            egui_canvas,
             web_options,
             Box::new(|cc| Ok(Box::new(PuzzleApp::new(cc, three_canvas_id)))),
         )
