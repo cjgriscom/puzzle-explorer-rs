@@ -698,11 +698,6 @@ impl eframe::App for PuzzleApp {
 
                     self.orbit_state.orbits_stale = false;
                     self.orbit_state.groups_stale = true;
-                    if self.orbit_state.auto_update_groups {
-                        self.gap_manager.clear_queue();
-                        self.orbit_gap.clear();
-                        self.pending_gap_requests.clear();
-                    }
                 }
                 WorkerResponse::Error(e) => {
                     *self.compute_output.borrow_mut() = format!("Error: {}", e);
@@ -718,12 +713,14 @@ impl eframe::App for PuzzleApp {
         self.dreadnaut_data.process_responses();
         self.gap_manager.process_responses();
 
+        let group_update_requested = self.orbit_state.requested_groups_update;
+
         for (req_id, res) in self.dreadnaut_data.completed_jobs.drain(..) {
             if let Some(&oi) = self.pending_dreadnaut_requests.get(&req_id) {
                 self.orbit_dreadnaut.insert(oi, res.clone());
                 self.pending_dreadnaut_requests.remove(&req_id);
 
-                if self.orbit_state.auto_update_groups
+                if (self.orbit_state.auto_update_groups || group_update_requested)
                     && let Some(orbit) = &self.orbit_result
                 {
                     if let Some(cached) = self.gap_cache.get(&res) {
@@ -750,16 +747,20 @@ impl eframe::App for PuzzleApp {
             }
         }
 
-        if self.pending_gap_requests.is_empty() {
+        if self.pending_dreadnaut_requests.is_empty() && self.pending_gap_requests.is_empty() {
             self.orbit_state.groups_stale = false;
+            self.orbit_state.requested_groups_update = false;
         }
 
         // -- Controls Window ---
         let buttons_enabled = self.anim.is_none();
 
-        egui::Window::new("Controls")
+        egui::Window::new("Puzzle Controls")
             .default_pos([50.0, 50.0])
             .show(ctx, |ui| {
+                // Bigger slider than default
+                ui.spacing_mut().slider_width = 250.0;
+
                 ui.heading("Parameters");
                 let mut changed = false;
 
@@ -794,18 +795,38 @@ impl eframe::App for PuzzleApp {
 
                 ui.horizontal(|ui| {
                     ui.label("p/q:");
+
                     if ui
-                        .add(egui::DragValue::new(&mut self.params.p).range(1..=20))
+                        .add(
+                            egui::DragValue::new(&mut self.params.p)
+                                .range(1..=20)
+                                .speed(0.02),
+                        )
                         .changed()
                     {
                         changed = true;
                     }
+
                     ui.label("/");
+
                     if ui
-                        .add(egui::DragValue::new(&mut self.params.q).range(2..=30))
+                        .add(
+                            egui::DragValue::new(&mut self.params.q)
+                                .range(2..=30)
+                                .speed(0.02),
+                        )
                         .changed()
                     {
                         changed = true;
+                    }
+
+                    if let Some(ang) = crate::geometry::derive_axis_angle(
+                        self.params.n_a,
+                        self.params.n_b,
+                        self.params.p,
+                        self.params.q,
+                    ) {
+                        ui.label(format!("Cut: {:.4}\u{00B0}", ang.to_degrees()));
                     }
                 });
 
@@ -824,7 +845,15 @@ impl eframe::App for PuzzleApp {
 
                 ui.label(format!("Cut A: {:.1}\u{00B0}", self.params.colat_a));
                 if ui
-                    .add(egui::Slider::new(&mut self.params.colat_a, 10.0..=170.0))
+                    .add(
+                        egui::Slider::new(&mut self.params.colat_a, 10.0..=170.0)
+                            .smallest_positive(0.1)
+                            .fixed_decimals(1)
+                            .step_by(0.1)
+                            .drag_value_speed(0.1)
+                            .show_value(true)
+                            .trailing_fill(true),
+                    )
                     .changed()
                 {
                     if self.params.lock_cuts {
@@ -836,7 +865,15 @@ impl eframe::App for PuzzleApp {
                 ui.label(format!("Cut B: {:.1}\u{00B0}", self.params.colat_b));
                 ui.add_enabled_ui(!self.params.lock_cuts, |ui| {
                     if ui
-                        .add(egui::Slider::new(&mut self.params.colat_b, 10.0..=170.0))
+                        .add(
+                            egui::Slider::new(&mut self.params.colat_b, 10.0..=170.0)
+                                .smallest_positive(0.1)
+                                .fixed_decimals(1)
+                                .step_by(0.1)
+                                .drag_value_speed(0.1)
+                                .show_value(true)
+                                .trailing_fill(true),
+                        )
                         .changed()
                     {
                         if self.params.lock_cuts {
@@ -857,13 +894,13 @@ impl eframe::App for PuzzleApp {
                         if ui.button("Rotate A").clicked() {
                             self.start_rotation('A', true);
                         }
-                        if ui.button("A\u{207B}\u{00B9}").clicked() {
+                        if ui.button("A'").clicked() {
                             self.start_rotation('A', false);
                         }
                         if ui.button("Rotate B").clicked() {
                             self.start_rotation('B', true);
                         }
-                        if ui.button("B\u{207B}\u{00B9}").clicked() {
+                        if ui.button("B'").clicked() {
                             self.start_rotation('B', false);
                         }
                     });
@@ -872,8 +909,7 @@ impl eframe::App for PuzzleApp {
 
         // Orbit Analysis Window
         egui::Window::new("Orbit Analysis")
-            .default_pos([50.0, 450.0])
-            .default_size([400.0, 400.0])
+            .default_pos([50.0, 350.0])
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     if ui
@@ -897,12 +933,21 @@ impl eframe::App for PuzzleApp {
                     {
                         self.spawn_orbit_worker();
                     }
-                    ui.label("Automatically Update Orbits");
+                    ui.label("Automatically update orbits");
                 });
 
                 ui.horizontal(|ui| {
-                    ui.add(toggle(&mut self.orbit_state.auto_update_groups));
-                    ui.label("Automatically Update Groups");
+                    if ui
+                        .add(toggle(&mut self.orbit_state.auto_update_groups))
+                        .changed()
+                        && self.orbit_state.auto_update_groups
+                    {
+                        self.orbit_state.groups_stale = true;
+                        self.orbit_dreadnaut.clear();
+                        self.orbit_gap.clear();
+                        self.spawn_orbit_worker();
+                    }
+                    ui.label("Automatically update groups");
                 });
 
                 ui.separator();
@@ -929,34 +974,12 @@ impl eframe::App for PuzzleApp {
                             egui::Button::new("Recompute Groups"),
                         )
                         .clicked()
-                        && let Some(orbit) = &self.orbit_result
                     {
-                        self.gap_manager.clear_queue();
+                        self.orbit_state.requested_groups_update = true;
+                        self.orbit_state.groups_stale = true;
+                        self.orbit_dreadnaut.clear();
                         self.orbit_gap.clear();
-                        self.pending_gap_requests.clear();
-
-                        for oi in 0..orbit.orbit_count {
-                            let members_count = orbit
-                                .face_orbit_indices
-                                .iter()
-                                .filter(|&&o| o == oi)
-                                .count();
-                            if members_count > 1 {
-                                if let Some(hash) = self.orbit_dreadnaut.get(&oi)
-                                    && let Some(cached) = self.gap_cache.get(hash)
-                                {
-                                    self.orbit_gap.insert(oi, cached.clone());
-                                    continue;
-                                }
-
-                                self.request_counter += 1;
-                                let req_id = self.request_counter;
-                                self.pending_gap_requests.insert(req_id, oi);
-
-                                let cmd = GapManager::construct_group_cmd(&orbit.generators[oi]);
-                                self.gap_manager.send_queued_command(req_id, &cmd);
-                            }
-                        }
+                        self.spawn_orbit_worker();
                     }
                 });
 
@@ -969,135 +992,126 @@ impl eframe::App for PuzzleApp {
                 // Show orbit tree
                 if let Some(orbit) = &self.orbit_result {
                     ui.separator();
-                    egui::ScrollArea::vertical()
-                        .max_height(350.0)
-                        .show(ui, |ui| {
-                            let msg = self.compute_output.borrow().clone();
-                            if msg.starts_with("Error:") {
-                                ui.label(egui::RichText::new(msg).color(egui::Color32::RED));
-                            } else {
-                                ui.label(format!("Pieces: {}", orbit.face_count));
-                            }
-                            ui.label(format!("Total Orbits: {}", orbit.orbit_count));
+                    egui::ScrollArea::vertical().vscroll(true).show(ui, |ui| {
+                        let msg = self.compute_output.borrow().clone();
+                        if msg.starts_with("Error:") {
+                            ui.label(egui::RichText::new(msg).color(egui::Color32::RED));
+                        } else {
+                            ui.label(format!("Pieces: {}", orbit.face_count));
+                        }
+                        ui.label(format!("Total Orbits: {}", orbit.orbit_count));
 
-                            let mut orbits_with_members: Vec<(usize, usize, Vec<usize>)> = (0
-                                ..orbit.orbit_count)
-                                .map(|oi| {
-                                    (
-                                        oi,
-                                        0, // placeholder
-                                        orbit
-                                            .face_orbit_indices
-                                            .iter()
-                                            .enumerate()
-                                            .filter(|&(_, &o)| o == oi)
-                                            .map(|(i, _)| i + 1)
-                                            .collect::<Vec<usize>>(),
-                                    )
-                                })
-                                .filter(|(_, _, members)| members.len() > 1)
-                                .collect();
+                        let mut orbits_with_members: Vec<(usize, usize, Vec<usize>)> = (0..orbit
+                            .orbit_count)
+                            .map(|oi| {
+                                (
+                                    oi,
+                                    0, // placeholder
+                                    orbit
+                                        .face_orbit_indices
+                                        .iter()
+                                        .enumerate()
+                                        .filter(|&(_, &o)| o == oi)
+                                        .map(|(i, _)| i + 1)
+                                        .collect::<Vec<usize>>(),
+                                )
+                            })
+                            .filter(|(_, _, members)| members.len() > 1)
+                            .collect();
 
-                            // Give them an original color index based on the unsorted layout (skipping singletons)
-                            (0..orbits_with_members.len()).for_each(|i| {
-                                orbits_with_members[i].1 = i;
-                            });
-
-                            orbits_with_members
-                                .sort_by_key(|(_, _, members)| -(members.len() as isize));
-
-                            for (oi, color_idx, members) in orbits_with_members {
-                                let c = crate::color::ORBIT_COLORS
-                                    [color_idx % crate::color::ORBIT_COLORS.len()];
-                                let rgb = c.1;
-                                let color_name = c.0;
-
-                                let header_text =
-                                    format!("     {}: {} pieces", color_name, members.len());
-
-                                // Draw circle in header
-                                let collapsing_resp = egui::CollapsingHeader::new(header_text)
-                                    .id_salt(format!("orbit_header_{}", oi))
-                                    .default_open(true)
-                                    .show(ui, |ui| {
-                                        if let Some(hash) = self.orbit_dreadnaut.get(&oi) {
-                                            ui.label(format!("Canon Hash: {}", hash));
-                                        } else {
-                                            ui.label("Canon Hash: Computing...");
-                                        }
-
-                                        if let Some(struct_desc) = self.orbit_gap.get(&oi) {
-                                            ui.label(format!("Size: {}", struct_desc.size));
-                                            ui.label(format!(
-                                                "Structure: {}",
-                                                struct_desc.structure
-                                            ));
-                                        } else {
-                                            ui.label("Size: Computing...");
-                                            ui.label("Structure: Computing...");
-                                        }
-                                    });
-
-                                // Draw circle on the header rect
-                                let circle_center =
-                                    collapsing_resp.header_response.rect.left_center()
-                                        + egui::vec2(24.0, 0.0);
-                                ui.painter().circle_filled(
-                                    circle_center,
-                                    5.0,
-                                    egui::Color32::from_rgb(
-                                        (rgb[0] * 255.0) as u8,
-                                        (rgb[1] * 255.0) as u8,
-                                        (rgb[2] * 255.0) as u8,
-                                    ),
-                                );
-                            }
+                        // Give them an original color index based on the unsorted layout (skipping singletons)
+                        (0..orbits_with_members.len()).for_each(|i| {
+                            orbits_with_members[i].1 = i;
                         });
+
+                        orbits_with_members
+                            .sort_by_key(|(_, _, members)| -(members.len() as isize));
+
+                        for (oi, color_idx, members) in orbits_with_members {
+                            let c = crate::color::ORBIT_COLORS
+                                [color_idx % crate::color::ORBIT_COLORS.len()];
+                            let rgb = c.1;
+                            let color_name = c.0;
+
+                            let header_text =
+                                format!("     {}: {} pieces", color_name, members.len());
+
+                            // Draw circle in header
+                            let collapsing_resp = egui::CollapsingHeader::new(header_text)
+                                .id_salt(format!("orbit_header_{}", oi))
+                                .default_open(true)
+                                .show(ui, |ui| {
+                                    if let Some(hash) = self.orbit_dreadnaut.get(&oi) {
+                                        ui.label(format!("Canon Hash: {}", hash));
+                                    } else {
+                                        ui.label("Canon Hash: Computing...");
+                                    }
+
+                                    if let Some(struct_desc) = self.orbit_gap.get(&oi) {
+                                        ui.label(format!("Size: {}", struct_desc.size));
+                                        ui.label(format!("Structure: {}", struct_desc.structure));
+                                    } else {
+                                        ui.label("Size: (not computed)");
+                                        ui.label("Structure: (not computed)");
+                                    }
+                                });
+
+                            // Draw circle on the header rect
+                            let circle_center = collapsing_resp.header_response.rect.left_center()
+                                + egui::vec2(24.0, 0.0);
+                            ui.painter().circle_filled(
+                                circle_center,
+                                5.0,
+                                egui::Color32::from_rgb(
+                                    (rgb[0] * 255.0) as u8,
+                                    (rgb[1] * 255.0) as u8,
+                                    (rgb[2] * 255.0) as u8,
+                                ),
+                            );
+                        }
+                    });
                 }
             });
 
         // GAP Window
-        egui::Window::new("GAP Interface")
-            .default_pos([400.0, 50.0])
-            .default_size([400.0, 300.0])
-            .show(ctx, |ui| {
-                match &self.gap_manager.state {
-                    GapState::NotStarted => {
-                        ui.label("GAP is not started.");
-                    }
-                    GapState::Loading(status, progress) => {
-                        ui.label(status);
-                        // Progress is currently just an arbitrary tracked value, but works.
-                        ui.add(egui::ProgressBar::new(*progress));
-                        ui.spinner();
-                    }
-                    GapState::Error(err) => {
-                        ui.label(format!("Error loading GAP: {}", err));
-                    }
-                    GapState::Ready => {
-                        egui::ScrollArea::vertical()
-                            .max_height(200.0)
-                            .stick_to_bottom(true)
-                            .show(ui, |ui| {
-                                ui.monospace(&self.gap_manager.output_history);
-                            });
-
-                        ui.horizontal(|ui| {
-                            ui.label("gap>");
-                            let response = ui.add(
-                                egui::TextEdit::singleline(&mut self.gap_input)
-                                    .desired_width(f32::INFINITY),
-                            );
-                            if response.lost_focus()
-                                && ui.input(|i| i.key_pressed(egui::Key::Enter))
-                            {
-                                let cmd = self.gap_input.clone();
-                                self.gap_input.clear();
-                                self.gap_manager.send_command(&cmd);
-                                response.request_focus();
-                            }
+        egui::Window::new("GAP Console")
+            .default_pos([500.0, 50.0])
+            .default_width(500.0)
+            .default_open(false)
+            .show(ctx, |ui| match &self.gap_manager.state {
+                GapState::NotStarted => {
+                    ui.label("GAP is not started.");
+                }
+                GapState::Loading(status, progress) => {
+                    ui.label(status);
+                    ui.add(egui::ProgressBar::new(*progress));
+                    ui.spinner();
+                }
+                GapState::Error(err) => {
+                    ui.label(format!("Error loading GAP: {}", err));
+                }
+                GapState::Ready => {
+                    egui::ScrollArea::vertical()
+                        .max_height(300.0)
+                        .auto_shrink(false)
+                        .stick_to_bottom(true)
+                        .show(ui, |ui| {
+                            ui.monospace(&self.gap_manager.output_history);
                         });
-                    }
+
+                    ui.horizontal(|ui| {
+                        ui.label("gap>");
+                        let response = ui.add(
+                            egui::TextEdit::singleline(&mut self.gap_input)
+                                .desired_width(f32::INFINITY),
+                        );
+                        if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                            let cmd = self.gap_input.clone();
+                            self.gap_input.clear();
+                            self.gap_manager.send_command(&cmd);
+                            response.request_focus();
+                        }
+                    });
                 }
             });
 

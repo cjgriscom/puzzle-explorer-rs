@@ -18,6 +18,7 @@ pub struct OrbitAnalysisState {
     pub auto_update_groups: bool,
     pub orbits_stale: bool,
     pub groups_stale: bool,
+    pub requested_groups_update: bool, // Manually requested update using button
 }
 
 impl Default for OrbitAnalysisState {
@@ -28,6 +29,7 @@ impl Default for OrbitAnalysisState {
             auto_update_groups: false,
             orbits_stale: false,
             groups_stale: false,
+            requested_groups_update: false,
         }
     }
 }
