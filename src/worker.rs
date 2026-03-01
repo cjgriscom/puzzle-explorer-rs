@@ -102,7 +102,7 @@ pub fn worker_handle_msg(msg: JsValue) -> JsValue {
                         face_count: n_faces,
                         face_positions,
                         face_orbit_indices,
-                        gap_text: analysis.gap_text,
+                        generators: analysis.generators,
                     })
                 }
             }

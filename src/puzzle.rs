@@ -42,5 +42,5 @@ pub struct OrbitResult {
     pub face_count: usize,
     pub face_positions: Vec<[f32; 3]>,
     pub face_orbit_indices: Vec<usize>,
-    pub gap_text: String,
+    pub generators: Vec<Vec<Vec<Vec<usize>>>>,
 }

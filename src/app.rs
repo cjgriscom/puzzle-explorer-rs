@@ -327,6 +327,9 @@ pub struct PuzzleApp {
     orbit_result: Option<OrbitResult>,
     _on_message: Option<Closure<dyn FnMut(MessageEvent)>>,
     _on_error: Option<Closure<dyn FnMut(MessageEvent)>>,
+
+    // Dreadnaut worker
+    dreadnaut_data: crate::dreadnaut::DreadnautManager,
 }
 
 impl PuzzleApp {
@@ -349,9 +352,12 @@ impl PuzzleApp {
             orbit_result: None,
             _on_message: None,
             _on_error: None,
+
+            dreadnaut_data: crate::dreadnaut::DreadnautManager::new(),
         };
 
         app.init_worker();
+        app.dreadnaut_data.init(cc.egui_ctx.clone());
         app.spawn_geometry_worker();
         app
     }
@@ -605,10 +611,11 @@ impl eframe::App for PuzzleApp {
             three.render();
         }
 
-        // -- Check worker results ---
-        if let Ok(mut res) = self.pending_response.try_borrow_mut()
-            && let Some(response) = res.take()
-        {
+        let mut geom_response = None;
+        if let Ok(mut res) = self.pending_response.try_borrow_mut() {
+            geom_response = res.take();
+        }
+        if let Some(response) = geom_response {
             self.is_computing = false;
             self.task_start_time = None;
             match response {
@@ -625,6 +632,7 @@ impl eframe::App for PuzzleApp {
                     if let Some(three) = &self.three {
                         three.update_face_dots(&data);
                     }
+                    self.dreadnaut_data.recompute_all(&data);
                     self.orbit_result = Some(data);
                 }
                 WorkerResponse::Error(e) => {
@@ -632,6 +640,9 @@ impl eframe::App for PuzzleApp {
                 }
             }
         }
+
+        // -- Check dreadnaut worker results ---
+        self.dreadnaut_data.process_responses();
 
         // -- Controls Window ---
         let buttons_enabled = self.anim.is_none();
@@ -782,7 +793,75 @@ impl eframe::App for PuzzleApp {
                     egui::ScrollArea::vertical()
                         .max_height(200.0)
                         .show(ui, |ui| {
-                            ui.monospace(&orbit.gap_text);
+                            let mut lines = Vec::new();
+                            lines.push("=== Orbit Analysis ===".to_string());
+                            lines.push(format!("Pieces={}", orbit.face_count));
+
+                            let mut color_idx = 0;
+                            for oi in 0..orbit.orbit_count {
+                                let members: Vec<usize> = orbit
+                                    .face_orbit_indices
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|&(_, &o)| o == oi)
+                                    .map(|(i, _)| i + 1)
+                                    .collect();
+
+                                if members.len() == 1 {
+                                    lines.push(format!(
+                                        "Set {} {}: [{}] (singleton)",
+                                        oi + 1,
+                                        crate::color::SINGLETON_COLOR.0,
+                                        members[0]
+                                    ));
+                                } else {
+                                    let color = crate::color::ORBIT_COLORS
+                                        [color_idx % crate::color::ORBIT_COLORS.len()]
+                                    .0;
+                                    color_idx += 1;
+                                    let members_str = members
+                                        .iter()
+                                        .map(|x| x.to_string())
+                                        .collect::<Vec<_>>()
+                                        .join(", ");
+                                    lines.push(format!(
+                                        "Set {} {}: [{}]",
+                                        oi + 1,
+                                        color,
+                                        members_str
+                                    ));
+
+                                    let current_generators = &orbit.generators[oi];
+                                    let mut gap_parts = Vec::new();
+                                    for generator in current_generators {
+                                        if generator.is_empty() {
+                                            gap_parts.push("()".to_string());
+                                        } else {
+                                            let cycle_str = generator
+                                                .iter()
+                                                .map(|cycle| {
+                                                    let c_str = cycle
+                                                        .iter()
+                                                        .map(|&idx| members[idx].to_string())
+                                                        .collect::<Vec<_>>()
+                                                        .join(",");
+                                                    format!("({})", c_str)
+                                                })
+                                                .collect::<Vec<_>>()
+                                                .join("");
+                                            gap_parts.push(cycle_str);
+                                        }
+                                    }
+
+                                    lines.push(format!("  GAP: Group([{}])", gap_parts.join(",")));
+
+                                    if let Some(hash) = self.dreadnaut_data.results.get(&oi) {
+                                        lines.push(format!("  Canon Hash: {}", hash));
+                                    }
+                                }
+                            }
+                            lines.push(format!("Total Orbits: {}", orbit.orbit_count));
+                            ui.monospace(lines.join("\n"));
                         });
                 }
             });

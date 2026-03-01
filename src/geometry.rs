@@ -1,4 +1,3 @@
-use crate::color::{ORBIT_COLORS, SINGLETON_COLOR};
 use glam::DVec3;
 use std::collections::{BTreeMap, HashSet};
 use std::f64::consts::PI;
@@ -580,9 +579,7 @@ pub fn get_poly_centroids(circles: &[Circle], arcs: &[Arc]) -> Vec<Face> {
 pub struct OrbitAnalysis {
     pub face_positions: Vec<DVec3>,
     pub orbits: Vec<Vec<usize>>,
-    pub perm_a: Vec<usize>,
-    pub perm_b: Vec<usize>,
-    pub gap_text: String,
+    pub generators: Vec<Vec<Vec<Vec<usize>>>>,
 }
 
 pub fn compute_orbit_analysis(
@@ -601,9 +598,7 @@ pub fn compute_orbit_analysis(
         return OrbitAnalysis {
             face_positions: vec![],
             orbits: vec![],
-            perm_a: vec![],
-            perm_b: vec![],
-            gap_text: "No faces found".to_string(),
+            generators: vec![],
         };
     }
 
@@ -713,8 +708,12 @@ pub fn compute_orbit_analysis(
     }
 
     // GAP notation
-    let perm_to_cycles = |perm: &[usize], subset: &[usize]| -> Vec<Vec<usize>> {
-        let in_set: HashSet<usize> = subset.iter().cloned().collect();
+
+    let perm_to_0_indexed_cycles = |perm: &[usize], subset: &[usize]| -> Vec<Vec<usize>> {
+        let mut in_set = std::collections::HashMap::new();
+        for (i, &v) in subset.iter().enumerate() {
+            in_set.insert(v, i);
+        }
         let mut seen = HashSet::new();
         let mut cycles = Vec::new();
         for &start in subset {
@@ -723,9 +722,9 @@ pub fn compute_orbit_analysis(
             }
             let mut cycle = Vec::new();
             let mut cur = start;
-            while !seen.contains(&cur) && in_set.contains(&cur) {
+            while !seen.contains(&cur) && in_set.contains_key(&cur) {
                 seen.insert(cur);
-                cycle.push(cur + 1);
+                cycle.push(in_set[&cur]);
                 cur = perm[cur];
             }
             if cycle.len() > 1 {
@@ -735,69 +734,28 @@ pub fn compute_orbit_analysis(
         cycles
     };
 
-    let cycles_to_gap = |cycles: &[Vec<usize>]| -> String {
-        if cycles.is_empty() {
-            "()".to_string()
-        } else {
-            cycles
-                .iter()
-                .map(|c| {
-                    format!(
-                        "({})",
-                        c.iter()
-                            .map(|x| x.to_string())
-                            .collect::<Vec<_>>()
-                            .join(",")
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("")
-        }
-    };
+    let mut generators = Vec::new();
 
-    let mut lines = Vec::new();
-    lines.push("=== Orbit Analysis ===".to_string());
-    lines.push(format!("Pieces={}", n_faces));
-
-    let mut color_idx = 0;
-    for (oi, members) in orbits.iter().enumerate() {
-        let members_1: Vec<usize> = members.iter().map(|&x| x + 1).collect();
+    for members in orbits.iter() {
         if members.len() == 1 {
-            lines.push(format!(
-                "Set {} {}: [{}] (singleton)",
-                oi + 1,
-                SINGLETON_COLOR.0,
-                members_1[0]
-            ));
+            generators.push(vec![]);
         } else {
-            let color = ORBIT_COLORS[color_idx % ORBIT_COLORS.len()].0;
-            color_idx += 1;
-            lines.push(format!(
-                "Set {} {}: [{}]",
-                oi + 1,
-                color,
-                members_1
-                    .iter()
-                    .map(|x| x.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ));
-            let cycles_a = perm_to_cycles(&perm_a, members);
-            let cycles_b = perm_to_cycles(&perm_b, members);
-            lines.push(format!(
-                "  GAP: Group([{},{}])",
-                cycles_to_gap(&cycles_a),
-                cycles_to_gap(&cycles_b)
-            ));
+            let gen_a = perm_to_0_indexed_cycles(&perm_a, members);
+            let gen_b = perm_to_0_indexed_cycles(&perm_b, members);
+            let mut gens_for_orbit = Vec::new();
+            if !gen_a.is_empty() {
+                gens_for_orbit.push(gen_a);
+            }
+            if !gen_b.is_empty() {
+                gens_for_orbit.push(gen_b);
+            }
+            generators.push(gens_for_orbit);
         }
     }
-    lines.push(format!("Total Orbits: {}", orbits.len()));
 
     OrbitAnalysis {
         face_positions: base_pos,
         orbits,
-        perm_a,
-        perm_b,
-        gap_text: lines.join("\n"),
+        generators,
     }
 }

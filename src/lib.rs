@@ -2,6 +2,7 @@
 
 mod app;
 mod color;
+mod dreadnaut;
 mod geometry;
 mod gui;
 mod puzzle;
