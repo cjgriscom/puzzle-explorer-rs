@@ -4,6 +4,12 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 use web_sys::{MessageEvent, Worker, WorkerOptions};
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct GapGroupResult {
+    pub size: String,
+    pub structure: String,
+}
+
 #[derive(Clone, PartialEq)]
 pub enum GapState {
     NotStarted,
@@ -27,7 +33,7 @@ pub struct GapManager {
     // Command queue and buffered output state
     pub queue: Vec<usize>,
     pub pending_commands: std::collections::VecDeque<(usize, String)>,
-    pub completed_jobs: Vec<(usize, String)>,
+    pub completed_jobs: Vec<(usize, GapGroupResult)>,
     pub current_buffer: String,
     pub current_job: Option<usize>,
 
@@ -152,7 +158,26 @@ impl GapManager {
                                     // Save result
                                     let result_text =
                                         std::mem::take(&mut self.current_buffer).trim().to_string();
-                                    self.completed_jobs.push((job_id, result_text));
+
+                                    let mut lines = result_text.lines();
+                                    // The output looks like: `<size>\n<structure>`
+                                    let size_str = lines.next().unwrap_or("").trim().to_string();
+                                    let struct_str = lines.next().unwrap_or("").trim().to_string();
+
+                                    let result = GapGroupResult {
+                                        size: if size_str.is_empty() {
+                                            "Unknown".to_string()
+                                        } else {
+                                            size_str
+                                        },
+                                        structure: if struct_str.is_empty() {
+                                            "Unknown".to_string()
+                                        } else {
+                                            struct_str
+                                        },
+                                    };
+
+                                    self.completed_jobs.push((job_id, result));
                                     self.current_job = None;
                                 } else {
                                     // Still reading output for this job
@@ -284,7 +309,7 @@ impl GapManager {
         }
 
         format!(
-            "Print(StructureDescription(Group([{}])));",
+            "g := Group([{}]);; Print(Size(g), \"\\n\", StructureDescription(g));",
             gap_parts.join(",")
         )
     }

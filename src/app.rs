@@ -343,7 +343,8 @@ pub struct PuzzleApp {
     pending_dreadnaut_requests: std::collections::HashMap<usize, usize>, // req_id -> orbit_index
     pending_gap_requests: std::collections::HashMap<usize, usize>,       // req_id -> orbit_index
     orbit_dreadnaut: std::collections::HashMap<usize, String>,
-    orbit_gap: std::collections::HashMap<usize, String>,
+    orbit_gap: std::collections::HashMap<usize, crate::gap::GapGroupResult>,
+    gap_cache: std::collections::HashMap<String, crate::gap::GapGroupResult>, // global table of dreadnaut hash -> gap result
 }
 
 impl PuzzleApp {
@@ -378,6 +379,7 @@ impl PuzzleApp {
             pending_gap_requests: std::collections::HashMap::new(),
             orbit_dreadnaut: std::collections::HashMap::new(),
             orbit_gap: std::collections::HashMap::new(),
+            gap_cache: std::collections::HashMap::new(),
         };
 
         app.init_worker();
@@ -697,26 +699,9 @@ impl eframe::App for PuzzleApp {
                     self.orbit_state.orbits_stale = false;
                     self.orbit_state.groups_stale = true;
                     if self.orbit_state.auto_update_groups {
-                        let orbit = self.orbit_result.clone().unwrap();
                         self.gap_manager.clear_queue();
                         self.orbit_gap.clear();
                         self.pending_gap_requests.clear();
-
-                        for oi in 0..orbit.orbit_count {
-                            let members_count = orbit
-                                .face_orbit_indices
-                                .iter()
-                                .filter(|&&o| o == oi)
-                                .count();
-                            if members_count > 1 {
-                                self.request_counter += 1;
-                                let req_id = self.request_counter;
-                                self.pending_gap_requests.insert(req_id, oi);
-
-                                let cmd = GapManager::construct_group_cmd(&orbit.generators[oi]);
-                                self.gap_manager.send_queued_command(req_id, &cmd);
-                            }
-                        }
                     }
                 }
                 WorkerResponse::Error(e) => {
@@ -735,15 +720,33 @@ impl eframe::App for PuzzleApp {
 
         for (req_id, res) in self.dreadnaut_data.completed_jobs.drain(..) {
             if let Some(&oi) = self.pending_dreadnaut_requests.get(&req_id) {
-                self.orbit_dreadnaut.insert(oi, res);
+                self.orbit_dreadnaut.insert(oi, res.clone());
                 self.pending_dreadnaut_requests.remove(&req_id);
+
+                if self.orbit_state.auto_update_groups
+                    && let Some(orbit) = &self.orbit_result
+                {
+                    if let Some(cached) = self.gap_cache.get(&res) {
+                        self.orbit_gap.insert(oi, cached.clone());
+                    } else {
+                        self.request_counter += 1;
+                        let new_req_id = self.request_counter;
+                        self.pending_gap_requests.insert(new_req_id, oi);
+                        let cmd = GapManager::construct_group_cmd(&orbit.generators[oi]);
+                        self.gap_manager.send_queued_command(new_req_id, &cmd);
+                    }
+                }
             }
         }
 
         for (req_id, res) in self.gap_manager.completed_jobs.drain(..) {
             if let Some(&oi) = self.pending_gap_requests.get(&req_id) {
-                self.orbit_gap.insert(oi, res);
+                self.orbit_gap.insert(oi, res.clone());
                 self.pending_gap_requests.remove(&req_id);
+
+                if let Some(hash) = self.orbit_dreadnaut.get(&oi) {
+                    self.gap_cache.insert(hash.clone(), res);
+                }
             }
         }
 
@@ -939,6 +942,13 @@ impl eframe::App for PuzzleApp {
                                 .filter(|&&o| o == oi)
                                 .count();
                             if members_count > 1 {
+                                if let Some(hash) = self.orbit_dreadnaut.get(&oi)
+                                    && let Some(cached) = self.gap_cache.get(hash)
+                                {
+                                    self.orbit_gap.insert(oi, cached.clone());
+                                    continue;
+                                }
+
                                 self.request_counter += 1;
                                 let req_id = self.request_counter;
                                 self.pending_gap_requests.insert(req_id, oi);
@@ -959,11 +969,12 @@ impl eframe::App for PuzzleApp {
                             ui.label(format!("Pieces: {}", orbit.face_count));
                             ui.label(format!("Total Orbits: {}", orbit.orbit_count));
 
-                            let mut orbits_with_members: Vec<(usize, Vec<usize>)> = (0..orbit
-                                .orbit_count)
+                            let mut orbits_with_members: Vec<(usize, usize, Vec<usize>)> = (0
+                                ..orbit.orbit_count)
                                 .map(|oi| {
                                     (
                                         oi,
+                                        0, // placeholder
                                         orbit
                                             .face_orbit_indices
                                             .iter()
@@ -973,14 +984,18 @@ impl eframe::App for PuzzleApp {
                                             .collect::<Vec<usize>>(),
                                     )
                                 })
-                                .filter(|(_, members)| members.len() > 1)
+                                .filter(|(_, _, members)| members.len() > 1)
                                 .collect();
 
-                            orbits_with_members
-                                .sort_by_key(|(_, members)| -(members.len() as isize));
+                            // Give them an original color index based on the unsorted layout (skipping singletons)
+                            (0..orbits_with_members.len()).for_each(|i| {
+                                orbits_with_members[i].1 = i;
+                            });
 
-                            for (color_idx, (oi, members)) in orbits_with_members.iter().enumerate()
-                            {
+                            orbits_with_members
+                                .sort_by_key(|(_, _, members)| -(members.len() as isize));
+
+                            for (oi, color_idx, members) in orbits_with_members {
                                 let c = crate::color::ORBIT_COLORS
                                     [color_idx % crate::color::ORBIT_COLORS.len()];
                                 let rgb = c.1;
@@ -1001,8 +1016,13 @@ impl eframe::App for PuzzleApp {
                                         }
 
                                         if let Some(struct_desc) = self.orbit_gap.get(&oi) {
-                                            ui.label(format!("Structure: {}", struct_desc));
+                                            ui.label(format!("Size: {}", struct_desc.size));
+                                            ui.label(format!(
+                                                "Structure: {}",
+                                                struct_desc.structure
+                                            ));
                                         } else {
+                                            ui.label("Size: Computing...");
                                             ui.label("Structure: Computing...");
                                         }
                                     });
