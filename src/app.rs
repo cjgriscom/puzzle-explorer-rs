@@ -72,14 +72,19 @@ impl ThreeState {
         let renderer = WebGLRenderer::new(&options);
         renderer.setSize(width, height);
         renderer.setPixelRatio(window.device_pixel_ratio().min(2.0));
-        renderer.setClearColor(0xdddddd);
+        renderer.setClearColor(0x222222);
 
         let group = Group::new();
 
-        // White sphere
+        // Render sphere
         let sphere_geo = SphereGeometry::new(R, 64, 48);
         let mat_params = js_sys::Object::new();
-        js_sys::Reflect::set(&mat_params, &"color".into(), &0xffffffu32.into()).ok()?;
+        js_sys::Reflect::set(
+            &mat_params,
+            &"color".into(),
+            &crate::color::SPHERE_COLOR.into(),
+        )
+        .ok()?;
         js_sys::Reflect::set(&mat_params, &"polygonOffset".into(), &true.into()).ok()?;
         js_sys::Reflect::set(&mat_params, &"polygonOffsetFactor".into(), &1.into()).ok()?;
         js_sys::Reflect::set(&mat_params, &"polygonOffsetUnits".into(), &1.into()).ok()?;
@@ -137,7 +142,7 @@ impl ThreeState {
                 &self.cut_group,
                 &poly_line.points,
                 poly_line.is_loop,
-                0x000000,
+                crate::color::ARC_COLOR,
             );
         }
     }
@@ -350,7 +355,7 @@ pub struct PuzzleApp {
 impl PuzzleApp {
     pub fn new(cc: &eframe::CreationContext<'_>, three_canvas_id: String) -> Self {
         let three = ThreeState::new(three_canvas_id);
-        cc.egui_ctx.set_visuals(Visuals::light());
+        cc.egui_ctx.set_visuals(Visuals::dark());
 
         let mut app = Self {
             params: PuzzleParams::default(),
@@ -1041,17 +1046,17 @@ impl eframe::App for PuzzleApp {
                                 .default_open(true)
                                 .show(ui, |ui| {
                                     if let Some(hash) = self.orbit_dreadnaut.get(&oi) {
-                                        ui.label(format!("Canon Hash: {}", hash));
+                                        ui.label(format!("Canonical Label: {}", hash));
                                     } else {
-                                        ui.label("Canon Hash: Computing...");
+                                        ui.label("Canonical Label: Computing...");
                                     }
 
                                     if let Some(struct_desc) = self.orbit_gap.get(&oi) {
-                                        ui.label(format!("Size: {}", struct_desc.size));
                                         ui.label(format!("Structure: {}", struct_desc.structure));
+                                        ui.label(format!("Permutations: {}", struct_desc.size));
                                     } else {
-                                        ui.label("Size: (not computed)");
                                         ui.label("Structure: (not computed)");
+                                        ui.label("Permutations: (not computed)");
                                     }
                                 });
 
