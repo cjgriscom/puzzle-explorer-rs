@@ -635,6 +635,7 @@ pub fn get_poly_centroids(circles: &[Circle], arcs: &[Arc]) -> Result<Vec<Face>,
     // Step 4: Walk faces by following "next edge" (turn right) at each node
     let mut faces = Vec::new();
     let mut visited: HashSet<(usize, usize)> = HashSet::new();
+    let mut skipped_faces = 0;
 
     for i in 0..nodes.len() {
         for j in 0..nodes[i].edges.len() {
@@ -675,15 +676,18 @@ pub fn get_poly_centroids(circles: &[Circle], arcs: &[Arc]) -> Result<Vec<Face>,
             let old_method = false;
 
             if !fail && curr == i && curr_edge_idx == j && path.len() >= 2 {
+                let mut perimeter = 0.0;
                 let mut sum = DVec3::ZERO;
+
                 for k in 0..path.len() {
                     let p1 = nodes[path[k].0].pos;
                     let p2 = nodes[path[(k + 1) % path.len()].0].pos;
 
-                    let angle = p1.angle_between(p2);
+                    // Rough perimeter estimate for eliminating tiny faces
+                    perimeter += p1.distance(p2);
 
                     if old_method {
-                        sum += (p1 + p2).normalize() * angle;
+                        sum += (p1 + p2).normalize() * p1.angle_between(p2);
                     } else {
                         let edge = &nodes[path[k].0].edges[path[k].1];
                         let arc_idx = edge.arc_idx;
@@ -707,20 +711,26 @@ pub fn get_poly_centroids(circles: &[Circle], arcs: &[Arc]) -> Result<Vec<Face>,
 
                         // Integral of arc between p1 and p2
                         let v = arc_integral(c, arc, da1, da2);
-                        sum += v * norm_ang(da2 - da1).min(norm_ang(da1 - da2));
+                        let angle = norm_ang(da2 - da1).min(norm_ang(da1 - da2));
+                        sum += v * angle;
                     }
                 }
 
-                faces.push(Face {
-                    center: sum.normalize() * LABEL_R,
-                });
+                // Filter out tiny faces
+                if perimeter > 0.02 {
+                    faces.push(Face {
+                        center: sum.normalize() * LABEL_R,
+                    });
+                } else {
+                    skipped_faces += 1;
+                }
             }
         }
     }
 
     let v = nodes.iter().filter(|n| !n.edges.is_empty()).count();
     let e = edge_pair_id;
-    let f = faces.len();
+    let f = faces.len() + skipped_faces;
     if v + f != e + 2 {
         return Err(format!(
             "Polygon detection failed - Euler's formula mismatch: V={} E={} F={} (expected V-E+F=2)",
@@ -968,10 +978,10 @@ mod tests {
     fn test_poly_centroids_case_0() {
         match get_poly_centroids_for(3, 2, 1, 4, 120.0f64.to_radians(), 120.0f64.to_radians()) {
             Ok(_faces) => {}
-            Err(_e) => {
-                //panic!("{}", e);
-                // This case fails due to very small triangles and ambiguous intersection -
-                // ideally something should filter out tiny faces and remove from search entirely
+            Err(e) => {
+                panic!("{}", e);
+                // Perfect boundary case where one piece disappears and another appears
+                // must merge points and ensure edges are connected
             }
         }
     }
@@ -989,7 +999,6 @@ mod tests {
         let result_b =
             get_poly_centroids_for(3, 2, 1, 3, 125.3f64.to_radians(), 125.3f64.to_radians());
 
-        // TODO
         match (result_a, result_b) {
             (Ok(faces_a), Ok(faces_b)) => {
                 println!("Found {} faces in A", faces_a.len());
