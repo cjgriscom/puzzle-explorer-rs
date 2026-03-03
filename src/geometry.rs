@@ -731,7 +731,9 @@ pub fn get_poly_centroids(circles: &[Circle], arcs: &[Arc]) -> Result<Vec<Face>,
     let v = nodes.iter().filter(|n| !n.edges.is_empty()).count();
     let e = edge_pair_id;
     let f = faces.len() + skipped_faces;
-    if v + f != e + 2 {
+    if v == 0 && f == 0 && e == 0 {
+        return Err("Polygon detection failed - no intersections found".to_string());
+    } else if v + f != e + 2 {
         return Err(format!(
             "Polygon detection failed - Euler's formula mismatch: V={} E={} F={} (expected V-E+F=2)",
             v, e, f
