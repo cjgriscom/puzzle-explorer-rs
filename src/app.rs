@@ -393,6 +393,7 @@ pub struct PuzzleApp {
     is_dragging: bool,
     last_mouse_pos: [f32; 2],
     stored_geometry: Option<GeometryResult>,
+    geometry_index: usize,
     anim: Option<AnimState>,
     orbit_result: Option<OrbitResult>,
     _on_message: Option<Closure<dyn FnMut(MessageEvent)>>,
@@ -406,8 +407,8 @@ pub struct PuzzleApp {
     gap_input: String,
 
     request_counter: usize,
-    pending_dreadnaut_requests: std::collections::HashMap<usize, usize>, // req_id -> orbit_index
-    pending_gap_requests: std::collections::HashMap<usize, usize>,       // req_id -> orbit_index
+    pending_dreadnaut_requests: std::collections::HashMap<usize, (usize, usize)>, // req_id -> (orbit_index, geometry_index)
+    pending_gap_requests: std::collections::HashMap<usize, (usize, usize)>, // req_id -> (orbit_index, geometry_index)
     orbit_dreadnaut: std::collections::HashMap<usize, String>,
     orbit_gap: std::collections::HashMap<usize, crate::gap::GapGroupResult>,
     gap_cache: std::collections::HashMap<String, crate::gap::GapGroupResult>, // global table of dreadnaut hash -> gap result
@@ -436,6 +437,7 @@ impl PuzzleApp {
             is_dragging: false,
             last_mouse_pos: [0.0, 0.0],
             stored_geometry: None,
+            geometry_index: 0,
             anim: None,
             orbit_result: None,
             _on_message: None,
@@ -733,6 +735,7 @@ impl eframe::App for PuzzleApp {
             self.task_start_time = None;
             match response {
                 WorkerResponse::GeometryComputed(data) => {
+                    self.geometry_index += 1;
                     *self.compute_output.borrow_mut() = format!("{} arcs", data.lines.len());
                     if let Some(three) = &self.three {
                         three.update_geometry(&data);
@@ -770,7 +773,8 @@ impl eframe::App for PuzzleApp {
                         if n_vertices > 1 && !gens.is_empty() {
                             self.request_counter += 1;
                             let req_id = self.request_counter;
-                            self.pending_dreadnaut_requests.insert(req_id, oi);
+                            self.pending_dreadnaut_requests
+                                .insert(req_id, (oi, self.geometry_index));
 
                             let script = DreadnautManager::construct_script(gens, n_vertices);
                             dreadnaut_batch.push((req_id, script));
@@ -800,7 +804,9 @@ impl eframe::App for PuzzleApp {
         let group_update_requested = self.orbit_state.requested_groups_update;
 
         for (req_id, res) in self.dreadnaut_data.completed_jobs.drain(..) {
-            if let Some(&oi) = self.pending_dreadnaut_requests.get(&req_id) {
+            if let Some(&(oi, geom_idx)) = self.pending_dreadnaut_requests.get(&req_id)
+                && geom_idx == self.geometry_index
+            {
                 self.orbit_dreadnaut.insert(oi, res.clone());
                 self.pending_dreadnaut_requests.remove(&req_id);
 
@@ -812,7 +818,8 @@ impl eframe::App for PuzzleApp {
                     } else {
                         self.request_counter += 1;
                         let new_req_id = self.request_counter;
-                        self.pending_gap_requests.insert(new_req_id, oi);
+                        self.pending_gap_requests
+                            .insert(new_req_id, (oi, self.geometry_index));
                         let cmd = GapManager::construct_group_cmd(&orbit.generators[oi]);
                         self.gap_manager.send_queued_command(new_req_id, &cmd);
                     }
@@ -821,12 +828,16 @@ impl eframe::App for PuzzleApp {
         }
 
         for (req_id, res) in self.gap_manager.completed_jobs.drain(..) {
-            if let Some(&oi) = self.pending_gap_requests.get(&req_id) {
-                self.orbit_gap.insert(oi, res.clone());
+            if let Some(&(oi, geom_idx)) = self.pending_gap_requests.get(&req_id) {
                 self.pending_gap_requests.remove(&req_id);
 
-                if let Some(hash) = self.orbit_dreadnaut.get(&oi) {
-                    self.gap_cache.insert(hash.clone(), res);
+                // Ignore results from old geometry
+                if self.geometry_index == geom_idx {
+                    self.orbit_gap.insert(oi, res.clone());
+
+                    if let Some(hash) = self.orbit_dreadnaut.get(&oi) {
+                        self.gap_cache.insert(hash.clone(), res);
+                    }
                 }
             }
         }
