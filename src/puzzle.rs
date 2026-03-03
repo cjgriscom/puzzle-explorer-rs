@@ -22,7 +22,6 @@ pub struct GeometryResult {
 pub struct PolyLine {
     pub points: Vec<[f32; 3]>,
     pub is_loop: bool,
-    pub color: [f32; 3],
 }
 
 // --- Orbits ---

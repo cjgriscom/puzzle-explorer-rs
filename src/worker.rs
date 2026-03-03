@@ -1,6 +1,9 @@
-use crate::geometry::{
-    TAU, compute_arcs, compute_orbit_analysis, derive_axis_angle, merge_arcs, sample_arc,
+use puzzle_explorer_math::geometry::{
+    compute_arcs, derive_axis_angle, merge_arcs,
 };
+use puzzle_explorer_math::math::TAU;
+use puzzle_explorer_math::orbit::compute_orbit_analysis;
+
 use crate::puzzle::{GeometryParams, GeometryResult, OrbitParams, OrbitResult, PolyLine};
 use wasm_bindgen::prelude::*;
 
@@ -57,11 +60,10 @@ pub fn worker_handle_msg(msg: JsValue) -> JsValue {
                     } else {
                         std::cmp::max(16, (arc.l / TAU * 128.0).round() as usize)
                     };
-                    let pts = sample_arc(circ, arc.s, arc.l, npts);
+                    let pts = circ.sample_arc(arc.s, arc.l, npts);
                     lines.push(PolyLine {
                         points: pts,
                         is_loop: is_full,
-                        color: [0.0, 0.0, 0.0],
                     });
                 }
             }

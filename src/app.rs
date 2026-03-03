@@ -5,10 +5,13 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, MessageEvent, Worker, WorkerOptions, window};
 
+use puzzle_explorer_math::geometry::{self, derive_axis_angle};
+use puzzle_explorer_math::circle::Circle;
+use puzzle_explorer_math::math::TAU;
+
 use crate::color::{ORBIT_COLORS, SINGLETON_COLOR, color_to_hex};
 use crate::dreadnaut::DreadnautManager;
 use crate::gap::{GapManager, GapState};
-use crate::geometry::{self, DISP_R, R, TAU};
 use crate::gui::{OrbitAnalysisState, PuzzleParams, toggle};
 use crate::puzzle::{GeometryParams, GeometryResult, OrbitParams, OrbitResult, PolyLine};
 use crate::three::{
@@ -17,6 +20,12 @@ use crate::three::{
     SpriteMaterial, Vector3, WebGLRenderer,
 };
 use crate::worker::{WorkerMessage, WorkerResponse};
+
+// --- Constants ---
+
+const R: f64 = 1.0; // Radius of sphere
+const DISP_R: f64 = R * 1.004; // Dist of arcs from sphere
+const LABEL_R: f64 = R * 1.04; // Dist. of orbit labels from sphere
 
 // --- Animation State ---
 
@@ -141,28 +150,27 @@ impl ThreeState {
             self.add_line_to_group(
                 &self.cut_group,
                 &poly_line.points,
+                DISP_R as f32,
                 poly_line.is_loop,
                 crate::color::ARC_COLOR,
             );
         }
     }
 
-    fn add_line_to_group(&self, grp: &Group, points: &[[f32; 3]], is_loop: bool, color: u32) {
+    fn add_line_to_group(&self, grp: &Group, points: &[[f32; 3]], mul: f32, is_loop: bool, color: u32) {
         let geometry = BufferGeometry::new();
         let mut flat = Vec::with_capacity(points.len() * 3);
         for p in points {
-            flat.push(p[0]);
-            flat.push(p[1]);
-            flat.push(p[2]);
+            flat.push(p[0] * mul);
+            flat.push(p[1] * mul);
+            flat.push(p[2] * mul);
         }
         let float_array = js_sys::Float32Array::from(flat.as_slice());
         let pos_attr = BufferAttribute::new(&float_array, 3);
         geometry.setAttribute("position", &pos_attr);
-
         let mat_params = js_sys::Object::new();
         let _ = js_sys::Reflect::set(&mat_params, &"color".into(), &color.into());
         let material = LineBasicMaterial::new(&mat_params);
-
         if is_loop {
             let line = LineLoop::new(&geometry, &material);
             grp.add(&line);
@@ -213,7 +221,7 @@ impl ThreeState {
                 // Move it out slightly to avoid depth fighting if it's right on the surface
                 let center_norm =
                     glam::DVec3::new(pos[0] as f64, pos[1] as f64, pos[2] as f64).normalize();
-                let label_pos = center_norm * crate::geometry::LABEL_R;
+                let label_pos = center_norm * LABEL_R;
                 sprite.position().set(label_pos.x, label_pos.y, label_pos.z);
                 self.face_group.add(&sprite);
             } else {
@@ -286,7 +294,7 @@ impl ThreeState {
         lines: &[PolyLine],
         axis: [f64; 3],
         cos_colat: f64,
-        boundary_circle: Option<&geometry::Circle>,
+        boundary_circle: Option<&Circle>,
     ) -> (Group, Group) {
         let static_grp = Group::new();
         let rot_grp = Group::new();
@@ -294,8 +302,8 @@ impl ThreeState {
 
         // Boundary circle
         if let Some(circ) = boundary_circle {
-            let pts = geometry::sample_arc(circ, 0.0, TAU, 128);
-            self.add_line_to_group_raw(&static_grp, &pts, true, crate::color::ARC_COLOR);
+            let pts = circ.sample_arc(0.0, TAU, 128);
+            self.add_line_to_group(&static_grp, &pts, DISP_R as f32, true, crate::color::ARC_COLOR);
         }
 
         let pt_dot = |p: &[f32; 3]| -> f64 {
@@ -337,35 +345,13 @@ impl ThreeState {
 
             for (run_pts, inside) in runs {
                 let grp = if inside { &rot_grp } else { &static_grp };
-                self.add_line_to_group_raw(grp, &run_pts, false, crate::color::ARC_COLOR);
+                self.add_line_to_group(grp, &run_pts, DISP_R as f32, false, crate::color::ARC_COLOR);
             }
         }
 
         (static_grp, rot_grp)
     }
 
-    fn add_line_to_group_raw(&self, grp: &Group, points: &[[f32; 3]], is_loop: bool, color: u32) {
-        let geometry = BufferGeometry::new();
-        let mut flat = Vec::with_capacity(points.len() * 3);
-        for p in points {
-            flat.push(p[0]);
-            flat.push(p[1]);
-            flat.push(p[2]);
-        }
-        let float_array = js_sys::Float32Array::from(flat.as_slice());
-        let pos_attr = BufferAttribute::new(&float_array, 3);
-        geometry.setAttribute("position", &pos_attr);
-        let mat_params = js_sys::Object::new();
-        let _ = js_sys::Reflect::set(&mat_params, &"color".into(), &color.into());
-        let material = LineBasicMaterial::new(&mat_params);
-        if is_loop {
-            let line = LineLoop::new(&geometry, &material);
-            grp.add(&line);
-        } else {
-            let line = Line::new(&geometry, &material);
-            grp.add(&line);
-        }
-    }
 }
 
 fn lerp_normalize(a: &[f32; 3], b: &[f32; 3], t: f32) -> [f32; 3] {
@@ -373,8 +359,7 @@ fn lerp_normalize(a: &[f32; 3], b: &[f32; 3], t: f32) -> [f32; 3] {
     let y = a[1] + t * (b[1] - a[1]);
     let z = a[2] + t * (b[2] - a[2]);
     let len = (x * x + y * y + z * z).sqrt();
-    let disp_r = DISP_R as f32;
-    [x / len * disp_r, y / len * disp_r, z / len * disp_r]
+    [x / len, y / len, z / len]
 }
 
 // --- PuzzleApp ---
@@ -632,7 +617,7 @@ impl PuzzleApp {
         };
 
         let boundary_circle =
-            geometry::make_circ(glam::DVec3::new(axis[0], axis[1], axis[2]), colat);
+            Circle::new(glam::DVec3::new(axis[0], axis[1], axis[2]), colat);
 
         let three = match &self.three {
             Some(t) => t,
@@ -890,7 +875,7 @@ impl eframe::App for PuzzleApp {
                     {
                         // Sync: when switching to manual, populate from current p/q
                         if self.params.manual_axis_angle
-                            && let Some(ang) = crate::geometry::derive_axis_angle(
+                            && let Some(ang) = derive_axis_angle(
                                 self.params.n_a,
                                 self.params.n_b,
                                 self.params.p,
@@ -949,7 +934,7 @@ impl eframe::App for PuzzleApp {
                             changed = true;
                         }
 
-                        if let Some(ang) = crate::geometry::derive_axis_angle(
+                        if let Some(ang) = derive_axis_angle(
                             self.params.n_a,
                             self.params.n_b,
                             self.params.p,
