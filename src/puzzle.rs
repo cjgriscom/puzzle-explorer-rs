@@ -10,6 +10,7 @@ pub struct GeometryParams {
     pub q: u32,
     pub colat_a: f32,
     pub colat_b: f32,
+    pub axis_angle_override: Option<f64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -34,6 +35,7 @@ pub struct OrbitParams {
     pub q: u32,
     pub colat_a: f32,
     pub colat_b: f32,
+    pub axis_angle_override: Option<f64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

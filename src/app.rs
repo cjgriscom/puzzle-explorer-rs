@@ -545,6 +545,14 @@ impl PuzzleApp {
         }
     }
 
+    fn axis_angle_override(&self) -> Option<f64> {
+        if self.params.manual_axis_angle {
+            Some(self.params.manual_axis_angle_deg.to_radians())
+        } else {
+            None
+        }
+    }
+
     fn spawn_geometry_worker(&mut self) {
         self.orbit_result = None;
         if let Some(three) = &self.three {
@@ -557,6 +565,7 @@ impl PuzzleApp {
             q: self.params.q,
             colat_a: self.params.colat_a,
             colat_b: self.params.colat_b,
+            axis_angle_override: self.axis_angle_override(),
         };
         self.post_message(WorkerMessage::ComputeGeometry(params));
     }
@@ -569,6 +578,7 @@ impl PuzzleApp {
             q: self.params.q,
             colat_a: self.params.colat_a,
             colat_b: self.params.colat_b,
+            axis_angle_override: self.axis_angle_override(),
         };
         self.post_message(WorkerMessage::ComputeOrbits(params));
     }
@@ -582,12 +592,14 @@ impl PuzzleApp {
             None => return,
         };
 
-        let axis_angle = match geometry::derive_axis_angle(
-            self.params.n_a,
-            self.params.n_b,
-            self.params.p,
-            self.params.q,
-        ) {
+        let axis_angle = match self.axis_angle_override().or_else(|| {
+            geometry::derive_axis_angle(
+                self.params.n_a,
+                self.params.n_b,
+                self.params.p,
+                self.params.q,
+            )
+        }) {
             Some(a) => a,
             None => return,
         };
@@ -858,41 +870,82 @@ impl eframe::App for PuzzleApp {
                 });
 
                 ui.horizontal(|ui| {
-                    ui.label("p/q:");
-
+                    ui.label("Manual Axis Angle");
                     if ui
-                        .add(
-                            egui::DragValue::new(&mut self.params.p)
-                                .range(1..=20)
-                                .speed(0.02),
-                        )
+                        .add(crate::gui::toggle(&mut self.params.manual_axis_angle))
                         .changed()
                     {
+                        // Sync: when switching to manual, populate from current p/q
+                        if self.params.manual_axis_angle
+                            && let Some(ang) = crate::geometry::derive_axis_angle(
+                                self.params.n_a,
+                                self.params.n_b,
+                                self.params.p,
+                                self.params.q,
+                            )
+                        {
+                            self.params.manual_axis_angle_deg =
+                                (ang.to_degrees() * 10000.0).round() / 10000.0;
+                        }
+
                         changed = true;
-                    }
-
-                    ui.label("/");
-
-                    if ui
-                        .add(
-                            egui::DragValue::new(&mut self.params.q)
-                                .range(2..=30)
-                                .speed(0.02),
-                        )
-                        .changed()
-                    {
-                        changed = true;
-                    }
-
-                    if let Some(ang) = crate::geometry::derive_axis_angle(
-                        self.params.n_a,
-                        self.params.n_b,
-                        self.params.p,
-                        self.params.q,
-                    ) {
-                        ui.label(format!("Cut: {:.4}\u{00B0}", ang.to_degrees()));
                     }
                 });
+
+                if self.params.manual_axis_angle {
+                    ui.horizontal(|ui| {
+                        ui.label("Axis Angle:");
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut self.params.manual_axis_angle_deg)
+                                    .range(0.0001..=179.9999)
+                                    .speed(0.01)
+                                    .fixed_decimals(4)
+                                    .suffix("°"),
+                            )
+                            .changed()
+                        {
+                            changed = true;
+                        }
+                    });
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.label("p/q:");
+
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut self.params.p)
+                                    .range(1..=20)
+                                    .speed(0.02),
+                            )
+                            .changed()
+                        {
+                            changed = true;
+                        }
+
+                        ui.label("/");
+
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut self.params.q)
+                                    .range(2..=30)
+                                    .speed(0.02),
+                            )
+                            .changed()
+                        {
+                            changed = true;
+                        }
+
+                        if let Some(ang) = crate::geometry::derive_axis_angle(
+                            self.params.n_a,
+                            self.params.n_b,
+                            self.params.p,
+                            self.params.q,
+                        ) {
+                            ui.label(format!("Cut: {:.4}\u{00B0}", ang.to_degrees()));
+                        }
+                    });
+                }
 
                 ui.separator();
 

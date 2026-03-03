@@ -36,7 +36,9 @@ pub fn worker_handle_msg(msg: JsValue) -> JsValue {
     let response = match message {
         WorkerMessage::ComputeGeometry(params) => {
             let mut lines = Vec::new();
-            if let Some(axis_angle) = derive_axis_angle(params.n_a, params.n_b, params.p, params.q)
+            if let Some(axis_angle) = params
+                .axis_angle_override
+                .or_else(|| derive_axis_angle(params.n_a, params.n_b, params.p, params.q))
             {
                 let (circles, arcs) = compute_arcs(
                     axis_angle,
@@ -67,7 +69,10 @@ pub fn worker_handle_msg(msg: JsValue) -> JsValue {
         }
 
         WorkerMessage::ComputeOrbits(params) => {
-            match derive_axis_angle(params.n_a, params.n_b, params.p, params.q) {
+            match params
+                .axis_angle_override
+                .or_else(|| derive_axis_angle(params.n_a, params.n_b, params.p, params.q))
+            {
                 None => {
                     WorkerResponse::Error("No valid axis angle for these parameters".to_string())
                 }
