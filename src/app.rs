@@ -425,6 +425,7 @@ pub struct PuzzleApp {
     pending_message: Option<WorkerMessage>,
     is_rotating_drag: bool,
     is_panning_drag: bool,
+    drag_started_outside_ui: bool,
     last_mouse_pos: [f32; 2],
     stored_geometry: Option<GeometryResult>,
     geometry_index: usize,
@@ -470,6 +471,7 @@ impl PuzzleApp {
             pending_message: None,
             is_rotating_drag: false,
             is_panning_drag: false,
+            drag_started_outside_ui: false,
             last_mouse_pos: [0.0, 0.0],
             stored_geometry: None,
             geometry_index: 0,
@@ -731,9 +733,20 @@ impl eframe::App for PuzzleApp {
         let pointer_over_ui = ctx.is_pointer_over_area();
         let anim_active = self.anim.is_some();
 
-        if !pointer_over_ui && !anim_active {
-            let primary_down = ctx.input(|i| i.pointer.primary_down());
-            let middle_down = ctx.input(|i| i.pointer.middle_down());
+        let primary_down = ctx.input(|i| i.pointer.primary_down());
+        let middle_down = ctx.input(|i| i.pointer.middle_down());
+        let any_down = primary_down || middle_down;
+        let drag_started_now = ctx.input(|i| i.pointer.any_pressed());
+        if drag_started_now {
+            self.drag_started_outside_ui = !pointer_over_ui;
+        }
+
+        if !any_down {
+            self.drag_started_outside_ui = false;
+        }
+
+        // Dragging logic - if mouse leaves UI during drag, prevent three from responding
+        if !anim_active && self.drag_started_outside_ui {
             if let Some(pos) = ctx.input(|i| i.pointer.interact_pos()) {
                 if primary_down && !middle_down {
                     if self.is_rotating_drag {
@@ -763,15 +776,19 @@ impl eframe::App for PuzzleApp {
                     self.is_panning_drag = false;
                 }
             }
+        } else {
+            self.is_rotating_drag = false;
+            self.is_panning_drag = false;
+        }
+
+        // Zoom is independent of drag ownership, but still disabled over egui and during animation.
+        if !pointer_over_ui && !anim_active {
             let scroll_y = ctx.input(|i| i.raw_scroll_delta.y);
             if scroll_y != 0.0
                 && let Some(three) = &mut self.three
             {
                 three.zoom(scroll_y as f64);
             }
-        } else {
-            self.is_rotating_drag = false;
-            self.is_panning_drag = false;
         }
 
         if let Some(three) = &mut self.three {
