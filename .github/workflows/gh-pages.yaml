@@ -29,15 +29,14 @@ jobs:
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
-      - name: Build WASM
-        run: wasm-pack build --target web --release
+      - name: Build
+        run: bash build.sh --release
 
       - name: Prepare Deployment Directory
         run: |
           mkdir -p dist
           cp index.html dist/
           cp coi-serviceworker.js dist/
-          cp worker.js dist/
           cp -r pkg dist/
           cp -r js dist/
           cp -r gap dist/

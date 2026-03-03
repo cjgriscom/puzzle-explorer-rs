@@ -23,7 +23,11 @@ use web_sys::{Event, HtmlCanvasElement};
 /// Initializes the Egui app and binds it to the specified canvas ID.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
-pub async fn run_app(egui_canvas_id: String, three_canvas_id: String) -> Result<(), JsValue> {
+pub async fn run_app(
+    egui_canvas_id: String,
+    three_canvas_id: String,
+    build_hash: String,
+) -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
     console_log::init_with_level(log::Level::Debug).ok();
 
@@ -61,7 +65,7 @@ pub async fn run_app(egui_canvas_id: String, three_canvas_id: String) -> Result<
         .start(
             egui_canvas,
             web_options,
-            Box::new(|cc| Ok(Box::new(PuzzleApp::new(cc, three_canvas_id)))),
+            Box::new(|cc| Ok(Box::new(PuzzleApp::new(cc, three_canvas_id, build_hash)))),
         )
         .await
         .map_err(|e| JsValue::from_str(&format!("Failed to start eframe: {:?}", e)))?;

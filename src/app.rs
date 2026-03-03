@@ -380,6 +380,7 @@ fn lerp_normalize(a: &[f32; 3], b: &[f32; 3], t: f32) -> [f32; 3] {
 // --- PuzzleApp ---
 
 pub struct PuzzleApp {
+    build_hash: String,
     params: PuzzleParams,
     orbit_state: OrbitAnalysisState,
     three: Option<ThreeState>,
@@ -413,11 +414,16 @@ pub struct PuzzleApp {
 }
 
 impl PuzzleApp {
-    pub fn new(cc: &eframe::CreationContext<'_>, three_canvas_id: String) -> Self {
+    pub fn new(
+        cc: &eframe::CreationContext<'_>,
+        three_canvas_id: String,
+        build_hash: String,
+    ) -> Self {
         let three = ThreeState::new(three_canvas_id);
         cc.egui_ctx.set_visuals(Visuals::dark());
 
         let mut app = Self {
+            build_hash: build_hash.clone(),
             params: PuzzleParams::default(),
             orbit_state: OrbitAnalysisState::default(),
             three,
@@ -447,21 +453,23 @@ impl PuzzleApp {
             gap_cache: std::collections::HashMap::new(),
         };
 
-        app.init_worker();
+        app.init_worker(&build_hash);
         app.dreadnaut_data.init(cc.egui_ctx.clone());
         app.gap_manager.init(cc.egui_ctx.clone());
         app.spawn_geometry_worker();
         app
     }
 
-    fn init_worker(&mut self) {
+    fn init_worker(&mut self, build_hash: &str) {
         if self.worker.is_some() {
             return;
         }
         let options = WorkerOptions::new();
         let _ = js_sys::Reflect::set(&options, &"type".into(), &"module".into());
 
-        if let Ok(w) = Worker::new_with_options("./worker.js", &options) {
+        let worker_url = format!("./pkg/worker.js?v={}", build_hash);
+
+        if let Ok(w) = Worker::new_with_options(&worker_url, &options) {
             let response_clone = self.pending_response.clone();
             let on_msg = Closure::wrap(Box::new(move |e: MessageEvent| {
                 if let Ok(data) = e.data().dyn_into::<js_sys::Object>() {
@@ -517,7 +525,7 @@ impl PuzzleApp {
         self._on_error = None;
         self.is_computing = false;
         self.task_start_time = None;
-        self.init_worker();
+        self.init_worker(&self.build_hash.clone());
     }
 
     fn post_message(&mut self, message: WorkerMessage) {

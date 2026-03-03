@@ -45,11 +45,12 @@
     <canvas id="egui-canvas"></canvas>
 
     <script type="module">
-        import init, { run_app } from './pkg/puzzle_explorer.js';
+        const { BUILD_HASH } = await import(`./pkg/build_hash.js?${Math.random()}`);
+        const { default: init, run_app } = await import(`./pkg/puzzle_explorer.js?v=${BUILD_HASH}`);
 
         async function main() {
-            await init();
-            run_app("egui-canvas", "three-canvas");
+            await init({ module_or_path: `./pkg/puzzle_explorer_bg.wasm?v=${BUILD_HASH}` });
+            run_app("egui-canvas", "three-canvas", BUILD_HASH);
         }
 
         main();
