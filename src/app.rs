@@ -443,10 +443,9 @@ pub struct PuzzleApp {
 
     request_counter: usize,
     pending_dreadnaut_requests: std::collections::HashMap<usize, (usize, usize)>, // req_id -> (orbit_index, geometry_index)
-    pending_gap_requests: std::collections::HashMap<usize, (usize, usize)>, // req_id -> (orbit_index, geometry_index)
+    pending_gap_requests: std::collections::HashMap<usize, String>, // req_id -> dreadnaut hash
     orbit_dreadnaut: std::collections::HashMap<usize, String>,
-    orbit_gap: std::collections::HashMap<usize, crate::gap::GapGroupResult>,
-    gap_cache: std::collections::HashMap<String, crate::gap::GapGroupResult>, // global table of dreadnaut hash -> gap result
+    gap_cache: std::collections::HashMap<String, Option<crate::gap::GapGroupResult>>, // global table of dreadnaut hash -> gap result
 }
 
 impl PuzzleApp {
@@ -488,7 +487,6 @@ impl PuzzleApp {
             pending_dreadnaut_requests: std::collections::HashMap::new(),
             pending_gap_requests: std::collections::HashMap::new(),
             orbit_dreadnaut: std::collections::HashMap::new(),
-            orbit_gap: std::collections::HashMap::new(),
             gap_cache: std::collections::HashMap::new(),
         };
 
@@ -838,7 +836,6 @@ impl eframe::App for PuzzleApp {
                         self.spawn_orbit_worker();
                     }
                     self.orbit_dreadnaut.clear();
-                    self.orbit_gap.clear();
 
                     self.orbit_result = None;
                 }
@@ -849,7 +846,6 @@ impl eframe::App for PuzzleApp {
                         three.update_face_dots(&data, self.orbit_state.number_pieces);
                     }
                     self.orbit_dreadnaut.clear();
-                    self.orbit_gap.clear();
 
                     let mut dreadnaut_batch = Vec::new();
                     for (oi, gens) in data.generators.iter().enumerate() {
@@ -888,42 +884,29 @@ impl eframe::App for PuzzleApp {
 
         let group_update_requested = self.orbit_state.requested_groups_update;
 
-        for (req_id, res) in self.dreadnaut_data.completed_jobs.drain(..) {
+        for (req_id, dreadnaut_res) in self.dreadnaut_data.completed_jobs.drain(..) {
             if let Some(&(oi, geom_idx)) = self.pending_dreadnaut_requests.get(&req_id)
                 && geom_idx == self.geometry_index
             {
-                self.orbit_dreadnaut.insert(oi, res.clone());
+                self.orbit_dreadnaut.insert(oi, dreadnaut_res.clone());
                 self.pending_dreadnaut_requests.remove(&req_id);
 
                 if (self.orbit_state.auto_update_groups || group_update_requested)
                     && let Some(orbit) = &self.orbit_result
-                {
-                    if let Some(cached) = self.gap_cache.get(&res) {
-                        self.orbit_gap.insert(oi, cached.clone());
-                    } else {
+                    && let None = self.gap_cache.get(&dreadnaut_res) {
                         self.request_counter += 1;
                         let new_req_id = self.request_counter;
                         self.pending_gap_requests
-                            .insert(new_req_id, (oi, self.geometry_index));
+                            .insert(new_req_id, dreadnaut_res);
                         let cmd = GapManager::construct_group_cmd(&orbit.generators[oi]);
                         self.gap_manager.send_queued_command(new_req_id, &cmd);
                     }
-                }
             }
         }
 
         for (req_id, res) in self.gap_manager.completed_jobs.drain(..) {
-            if let Some(&(oi, geom_idx)) = self.pending_gap_requests.get(&req_id) {
-                self.pending_gap_requests.remove(&req_id);
-
-                // Ignore results from old geometry
-                if self.geometry_index == geom_idx {
-                    self.orbit_gap.insert(oi, res.clone());
-
-                    if let Some(hash) = self.orbit_dreadnaut.get(&oi) {
-                        self.gap_cache.insert(hash.clone(), res);
-                    }
-                }
+            if let Some(hash) = &self.pending_gap_requests.remove(&req_id) {
+                self.gap_cache.insert(hash.to_string(), Some(res));
             }
         }
 
@@ -1202,7 +1185,6 @@ impl eframe::App for PuzzleApp {
                     {
                         self.orbit_state.groups_stale = true;
                         self.orbit_dreadnaut.clear();
-                        self.orbit_gap.clear();
                         self.spawn_orbit_worker();
                     }
                     ui.label("Automatically update groups");
@@ -1236,7 +1218,6 @@ impl eframe::App for PuzzleApp {
                         self.orbit_state.requested_groups_update = true;
                         self.orbit_state.groups_stale = true;
                         self.orbit_dreadnaut.clear();
-                        self.orbit_gap.clear();
                         self.spawn_orbit_worker();
                     }
                 });
@@ -1314,16 +1295,24 @@ impl eframe::App for PuzzleApp {
 
                                     if let Some(hash) = self.orbit_dreadnaut.get(&oi) {
                                         ui.label(format!("Canonical Label: {}", hash));
+                                        match self.gap_cache.get(hash) {
+                                            Some(None) => {
+                                                ui.label("Structure: Computing...");
+                                                ui.label("Permutations: Computing...");
+                                            }
+                                            Some(Some(cached)) => {
+                                                ui.label(format!("Structure: {}", cached.structure));
+                                                ui.label(format!("Permutations: {}", cached.size));
+                                            }
+                                            None => {
+                                                ui.label("Structure: (not computed)");
+                                                ui.label("Permutations: (not computed)");
+                                            }
+                                        }
                                     } else {
                                         ui.label("Canonical Label: Computing...");
-                                    }
-
-                                    if let Some(struct_desc) = self.orbit_gap.get(&oi) {
-                                        ui.label(format!("Structure: {}", struct_desc.structure));
-                                        ui.label(format!("Permutations: {}", struct_desc.size));
-                                    } else {
-                                        ui.label("Structure: (not computed)");
-                                        ui.label("Permutations: (not computed)");
+                                        ui.label("Structure: Computing...");
+                                        ui.label("Permutations: Computing...");
                                     }
                                 });
 
