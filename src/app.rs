@@ -915,8 +915,6 @@ impl eframe::App for PuzzleApp {
         self.dreadnaut_data.process_responses();
         self.gap_manager.process_responses();
 
-        let group_update_requested = self.orbit_state.requested_groups_update;
-
         for (req_id, dreadnaut_res) in self.dreadnaut_data.completed_jobs.drain(..) {
             if let Some(&(oi, geom_idx)) = self.pending_dreadnaut_requests.get(&req_id)
                 && geom_idx == self.geometry_index
@@ -924,7 +922,7 @@ impl eframe::App for PuzzleApp {
                 self.orbit_dreadnaut.insert(oi, dreadnaut_res.clone());
                 self.pending_dreadnaut_requests.remove(&req_id);
 
-                if (self.orbit_state.auto_update_groups || group_update_requested)
+                if self.orbit_state.auto_update_groups
                     && let Some(orbit) = &self.orbit_result
                     && let None = self.gap_cache.get(&dreadnaut_res)
                 {
@@ -945,7 +943,6 @@ impl eframe::App for PuzzleApp {
 
         if self.pending_dreadnaut_requests.is_empty() && self.pending_gap_requests.is_empty() {
             self.orbit_state.groups_stale = false;
-            self.orbit_state.requested_groups_update = false;
         }
 
         // -- Controls Window ---
@@ -1200,6 +1197,20 @@ impl eframe::App for PuzzleApp {
 
                 ui.horizontal(|ui| {
                     if ui
+                        .add(toggle(&mut self.orbit_state.auto_update_groups))
+                        .changed()
+                        && self.orbit_state.auto_update_groups
+                        && self.orbit_result.is_some()
+                    {
+                        self.orbit_state.groups_stale = true;
+                        self.orbit_dreadnaut.clear();
+                        self.spawn_orbit_worker();
+                    }
+                    ui.label("Compute groups");
+                });
+
+                ui.horizontal(|ui| {
+                    if ui
                         .add(toggle(&mut self.orbit_state.auto_update_orbits))
                         .changed()
                         && self.orbit_state.auto_update_orbits
@@ -1208,19 +1219,6 @@ impl eframe::App for PuzzleApp {
                         self.spawn_orbit_worker();
                     }
                     ui.label("Automatically update orbits");
-                });
-
-                ui.horizontal(|ui| {
-                    if ui
-                        .add(toggle(&mut self.orbit_state.auto_update_groups))
-                        .changed()
-                        && self.orbit_state.auto_update_groups
-                    {
-                        self.orbit_state.groups_stale = true;
-                        self.orbit_dreadnaut.clear();
-                        self.spawn_orbit_worker();
-                    }
-                    ui.label("Automatically update groups");
                 });
 
                 ui.separator();
@@ -1279,7 +1277,7 @@ impl eframe::App for PuzzleApp {
                         self.spawn_orbit_worker();
                     }
                 }
-                
+
                 ui.separator();
 
                 ui.horizontal(|ui| {
@@ -1292,22 +1290,6 @@ impl eframe::App for PuzzleApp {
                         )
                         .clicked()
                     {
-                        self.spawn_orbit_worker();
-                    }
-
-                    if ui
-                        .add_enabled(
-                            buttons_enabled
-                                && self.orbit_result.is_some()
-                                && (!self.orbit_state.auto_update_groups
-                                    || self.orbit_state.groups_stale),
-                            egui::Button::new("Recompute Groups"),
-                        )
-                        .clicked()
-                    {
-                        self.orbit_state.requested_groups_update = true;
-                        self.orbit_state.groups_stale = true;
-                        self.orbit_dreadnaut.clear();
                         self.spawn_orbit_worker();
                     }
                 });
