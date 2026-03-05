@@ -1,5 +1,32 @@
 use wasm_bindgen::prelude::*;
 
+/// Recursively dispose all geometry, material, and texture resources in a group's
+/// children, then clear the group. This prevents Three.js GPU memory leaks.
+pub fn dispose_group_children(group: &Group) {
+    let func = js_sys::Function::new_with_args(
+        "group",
+        r#"
+        function disposeNode(node) {
+            if (node.children) {
+                for (let i = node.children.length - 1; i >= 0; i--) {
+                    disposeNode(node.children[i]);
+                }
+            }
+            if (node.geometry) node.geometry.dispose();
+            if (node.material) {
+                if (node.material.map) node.material.map.dispose();
+                node.material.dispose();
+            }
+        }
+        for (let i = group.children.length - 1; i >= 0; i--) {
+            disposeNode(group.children[i]);
+        }
+        group.clear();
+        "#,
+    );
+    let _ = func.call1(&JsValue::NULL, group);
+}
+
 #[wasm_bindgen]
 extern "C" {
     // --- Vector3 ---
@@ -43,9 +70,6 @@ extern "C" {
 
     #[wasm_bindgen(method, structural, js_namespace = THREE)]
     pub fn rotateY(this: &Object3D, angle: f64);
-
-    #[wasm_bindgen(method, structural, js_namespace = THREE)]
-    pub fn clear(this: &Object3D);
 
     #[wasm_bindgen(method, structural, js_namespace = THREE)]
     pub fn add(this: &Object3D, object: &Object3D);
@@ -193,11 +217,17 @@ extern "C" {
     #[wasm_bindgen(constructor, js_namespace = THREE)]
     pub fn new(radius: f64, widthSegments: i32, heightSegments: i32) -> SphereGeometry;
 
+    #[wasm_bindgen(method, structural, js_namespace = THREE)]
+    pub fn dispose(this: &SphereGeometry);
+
     #[wasm_bindgen(js_namespace = THREE)]
     pub type MeshBasicMaterial;
 
     #[wasm_bindgen(constructor, js_namespace = THREE)]
     pub fn new(parameters: &js_sys::Object) -> MeshBasicMaterial;
+
+    #[wasm_bindgen(method, structural, js_namespace = THREE)]
+    pub fn dispose(this: &MeshBasicMaterial);
 
     #[wasm_bindgen(js_namespace = THREE, extends = Object3D)]
     pub type Mesh;

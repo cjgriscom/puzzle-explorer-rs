@@ -220,7 +220,7 @@ impl ThreeState {
     }
 
     pub fn update_geometry(&self, result: &GeometryResult) {
-        self.cut_group.clear();
+        crate::three::dispose_group_children(&self.cut_group);
         for poly_line in &result.lines {
             self.add_line_to_group(
                 &self.cut_group,
@@ -233,7 +233,7 @@ impl ThreeState {
     }
 
     pub fn update_axis_indicators(&self, axes: &[crate::puzzle::AxisDef], visible: bool) {
-        self.axis_group.clear();
+        crate::three::dispose_group_children(&self.axis_group);
         if !visible {
             return;
         }
@@ -280,7 +280,7 @@ impl ThreeState {
     }
 
     pub fn update_face_dots(&self, orbit_result: &OrbitResult, number_pieces: bool) {
-        self.face_group.clear();
+        crate::three::dispose_group_children(&self.face_group);
 
         let n_orbits = orbit_result.orbit_count;
         // Build orbit_index -> color mapping
@@ -389,7 +389,7 @@ impl ThreeState {
     }
 
     pub fn clear_face_dots(&self) {
-        self.face_group.clear();
+        crate::three::dispose_group_children(&self.face_group);
     }
 
     /// Build the two animation groups by splitting stored arc points along the cap boundary.
@@ -814,6 +814,8 @@ impl PuzzleApp {
 
         if finished && let Some(anim) = self.anim.take() {
             if let Some(three) = &self.three {
+                crate::three::dispose_group_children(&anim.static_group);
+                crate::three::dispose_group_children(&anim.rot_group);
                 three.group.remove(&anim.static_group);
                 three.group.remove(&anim.rot_group);
                 three.cut_group.set_visible(true);
