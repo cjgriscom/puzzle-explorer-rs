@@ -166,39 +166,26 @@ pub fn derive_axis_angle(n_a: u32, n_b: u32, p: u32, q: u32) -> Option<f64> {
     Some(cos_t.clamp(-1.0, 1.0).acos())
 }
 
+/// Each axis is (direction_unit_vec, colat_radians, rotational_symmetry_n).
 pub fn compute_arcs(
-    axis_angle_rad: f64,
-    colat_a: f64,
-    colat_b: f64,
-    n_a: u32,
-    n_b: u32,
+    axes: &[(DVec3, f64, u32)],
     max_iterations_cap: Option<usize>,
 ) -> (Vec<Circle>, Vec<Arc>) {
-    let axis_a = DVec3::new(0.0, 0.0, 1.0);
-    let axis_b = DVec3::new(axis_angle_rad.sin(), 0.0, axis_angle_rad.cos());
-    let cut_axes = [axis_a, axis_b];
-    let rot_orders = [n_a, n_b];
-    let colats = [colat_a, colat_b];
-
     let mut circles = Vec::new();
     let mut covered: Vec<Vec<Interval>> = Vec::new();
     let mut disp_arcs = Vec::new();
 
-    circles.push(Circle::new(axis_a, colat_a));
-    covered.push(vec![Interval { s: 0.0, l: TAU }]);
-    disp_arcs.push(Arc {
-        circ_idx: 0,
-        s: 0.0,
-        l: TAU,
-    });
-
-    circles.push(Circle::new(axis_b, colat_b));
-    covered.push(vec![Interval { s: 0.0, l: TAU }]);
-    disp_arcs.push(Arc {
-        circ_idx: 1,
-        s: 0.0,
-        l: TAU,
-    });
+    // Seed one full circle per axis
+    for &(axis, colat, _n) in axes {
+        let ci = circles.len();
+        circles.push(Circle::new(axis, colat));
+        covered.push(vec![Interval { s: 0.0, l: TAU }]);
+        disp_arcs.push(Arc {
+            circ_idx: ci,
+            s: 0.0,
+            l: TAU,
+        });
+    }
 
     let mut step_start = 0;
     let max_iterations = max_iterations_cap.unwrap_or(AUTO_MAX_ITERS);
@@ -206,13 +193,10 @@ pub fn compute_arcs(
         let before = disp_arcs.len();
         let mut bailout = false;
 
-        for mi in 0..2 {
+        for &(axis, cap_colat, n) in axes {
             if bailout {
                 break;
             }
-            let axis = cut_axes[mi];
-            let n = rot_orders[mi];
-            let cap_colat = colats[mi];
 
             for ai in step_start..before {
                 if bailout {

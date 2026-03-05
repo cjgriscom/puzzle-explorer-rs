@@ -6,7 +6,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, MessageEvent, Worker, WorkerOptions, window};
 
 use puzzle_explorer_math::circle::Circle;
-use puzzle_explorer_math::geometry::{self, derive_axis_angle};
+use puzzle_explorer_math::geometry::derive_axis_angle;
 use puzzle_explorer_math::math::TAU;
 
 use crate::color::{ORBIT_COLORS, SINGLETON_COLOR, color_to_hex};
@@ -14,7 +14,7 @@ use crate::dreadnaut::DreadnautManager;
 use crate::gap::{GapManager, GapState};
 use crate::gui::{OrbitAnalysisState, PuzzleParams, toggle};
 use crate::input::{CameraInputState, handle_camera_input};
-use crate::puzzle::{GeometryParams, GeometryResult, OrbitParams, OrbitResult, PolyLine};
+use crate::puzzle::{AxisDef, GeometryParams, GeometryResult, OrbitParams, OrbitResult, PolyLine};
 use crate::three::{
     BufferAttribute, BufferGeometry, CanvasTexture, Group, Line, LineBasicMaterial, LineLoop, Mesh,
     MeshBasicMaterial, PerspectiveCamera, Quaternion, Scene, SphereGeometry, Sprite,
@@ -635,33 +635,61 @@ impl PuzzleApp {
         }
     }
 
+    fn build_axes(&self) -> Vec<AxisDef> {
+        let axis_angle = match self.axis_angle_override().or_else(|| {
+            derive_axis_angle(
+                self.params.n_a,
+                self.params.n_b,
+                self.params.p,
+                self.params.q,
+            )
+        }) {
+            Some(a) => a,
+            None => return vec![],
+        };
+
+        vec![
+            AxisDef {
+                colat: self.params.colat_a,
+                direction: [0.0, 0.0, 1.0],
+                n: self.params.n_a,
+            },
+            AxisDef {
+                colat: self.params.colat_b,
+                direction: [axis_angle.sin(), 0.0, axis_angle.cos()],
+                n: self.params.n_b,
+            },
+        ]
+    }
+
     fn spawn_geometry_worker(&mut self) {
         self.orbit_result = None;
         if let Some(three) = &self.three {
             three.clear_face_dots();
         }
+        let axes = self.build_axes();
+        if axes.is_empty() {
+            *self.compute_output.borrow_mut() =
+                "No valid axis angle for these parameters".to_string();
+            self.stored_geometry = None;
+            return;
+        }
         let params = GeometryParams {
-            n_a: self.params.n_a,
-            n_b: self.params.n_b,
-            p: self.params.p,
-            q: self.params.q,
-            colat_a: self.params.colat_a,
-            colat_b: self.params.colat_b,
-            axis_angle_override: self.axis_angle_override(),
+            axes,
             max_iterations_cap: self.max_iterations_cap_override(),
         };
         self.post_message(WorkerMessage::ComputeGeometry(params));
     }
 
     fn spawn_orbit_worker(&mut self) {
+        let axes = self.build_axes();
+        if axes.is_empty() {
+            *self.compute_output.borrow_mut() =
+                "No valid axis angle for these parameters".to_string();
+            return;
+        }
         let params = OrbitParams {
-            n_a: self.params.n_a,
-            n_b: self.params.n_b,
-            p: self.params.p,
-            q: self.params.q,
-            colat_a: self.params.colat_a,
-            colat_b: self.params.colat_b,
-            axis_angle_override: self.axis_angle_override(),
+            axes,
             max_iterations_cap: self.max_iterations_cap_override(),
             fudged_mode: self.orbit_state.fudged_mode,
             min_piece_angle_deg: self.orbit_state.min_piece_angle_deg,
@@ -670,7 +698,7 @@ impl PuzzleApp {
         self.post_message(WorkerMessage::ComputeOrbits(params));
     }
 
-    fn start_rotation(&mut self, which: char, inverse: bool) {
+    fn start_rotation(&mut self, axis_index: usize, inverse: bool) {
         if self.anim.is_some() {
             return;
         }
@@ -679,28 +707,15 @@ impl PuzzleApp {
             None => return,
         };
 
-        let axis_angle = match self.axis_angle_override().or_else(|| {
-            geometry::derive_axis_angle(
-                self.params.n_a,
-                self.params.n_b,
-                self.params.p,
-                self.params.q,
-            )
-        }) {
+        let axes = self.build_axes();
+        let axis_def = match axes.get(axis_index) {
             Some(a) => a,
             None => return,
         };
 
-        let colat_a_rad = (self.params.colat_a as f64).to_radians();
-        let colat_b_rad = (self.params.colat_b as f64).to_radians();
-
-        let (axis, colat, n) = if which == 'A' {
-            ([0.0, 0.0, 1.0], colat_a_rad, self.params.n_a)
-        } else {
-            let sa = axis_angle.sin();
-            let ca = axis_angle.cos();
-            ([sa, 0.0, ca], colat_b_rad, self.params.n_b)
-        };
+        let axis = axis_def.direction;
+        let colat = (axis_def.colat as f64).to_radians();
+        let n = axis_def.n;
 
         let target_angle = if inverse {
             -(TAU / n as f64)
@@ -780,10 +795,10 @@ impl eframe::App for PuzzleApp {
         if !ctx.wants_keyboard_input() && self.anim.is_none() {
             let shift = ctx.input(|i| i.modifiers.shift);
             if ctx.input(|i| i.key_pressed(egui::Key::A)) {
-                self.start_rotation('A', !shift);
+                self.start_rotation(0, !shift);
             }
             if ctx.input(|i| i.key_pressed(egui::Key::B)) {
-                self.start_rotation('B', !shift);
+                self.start_rotation(1, !shift);
             }
         }
 
@@ -1080,16 +1095,16 @@ impl eframe::App for PuzzleApp {
                 ui.add_enabled_ui(buttons_enabled, |ui| {
                     ui.horizontal(|ui| {
                         if ui.button("Rotate A").clicked() {
-                            self.start_rotation('A', true);
+                            self.start_rotation(0, true);
                         }
                         if ui.button("A'").clicked() {
-                            self.start_rotation('A', false);
+                            self.start_rotation(0, false);
                         }
                         if ui.button("Rotate B").clicked() {
-                            self.start_rotation('B', true);
+                            self.start_rotation(1, true);
                         }
                         if ui.button("B'").clicked() {
-                            self.start_rotation('B', false);
+                            self.start_rotation(1, false);
                         }
                     });
                 });

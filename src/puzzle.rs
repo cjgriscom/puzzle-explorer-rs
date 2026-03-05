@@ -1,16 +1,19 @@
 use serde::{Deserialize, Serialize};
 
+// --- Axis Definition ---
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct AxisDef {
+    pub colat: f32,          // colatitude in degrees
+    pub direction: [f64; 3], // unit direction vector
+    pub n: u32,              // rotational symmetry order
+}
+
 // --- Geometry ---
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct GeometryParams {
-    pub n_a: u32,
-    pub n_b: u32,
-    pub p: u32,
-    pub q: u32,
-    pub colat_a: f32,
-    pub colat_b: f32,
-    pub axis_angle_override: Option<f64>,
+    pub axes: Vec<AxisDef>,
     pub max_iterations_cap: Option<u32>,
 }
 
@@ -29,13 +32,7 @@ pub struct PolyLine {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OrbitParams {
-    pub n_a: u32,
-    pub n_b: u32,
-    pub p: u32,
-    pub q: u32,
-    pub colat_a: f32,
-    pub colat_b: f32,
-    pub axis_angle_override: Option<f64>,
+    pub axes: Vec<AxisDef>,
     pub max_iterations_cap: Option<u32>,
     pub fudged_mode: bool,
     pub min_piece_angle_deg: f32,

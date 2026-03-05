@@ -420,7 +420,10 @@ mod tests {
         colat_b: f64,
     ) -> Result<Vec<Face>, String> {
         let axis_angle = derive_axis_angle(n_a, n_b, p, q).expect("Failed to derive axis angle");
-        let (circles, arcs) = compute_arcs(axis_angle, colat_a, colat_b, n_a, n_b, None);
+        let axis_a = glam::DVec3::new(0.0, 0.0, 1.0);
+        let axis_b = glam::DVec3::new(axis_angle.sin(), 0.0, axis_angle.cos());
+        let axes = [(axis_a, colat_a, n_a), (axis_b, colat_b, n_b)];
+        let (circles, arcs) = compute_arcs(&axes, None);
         let merged_arcs = merge_arcs(&arcs);
 
         /*println!(
