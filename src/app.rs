@@ -971,8 +971,13 @@ impl eframe::App for PuzzleApp {
         crate::gui::gap_console::build_gap_console_window(self, ctx);
 
         crate::gui::orbit_analysis::build_orbit_analysis_window(self, ctx);
+        crate::gui::axis_definitions::build_axis_definitions_window(self, ctx);
         crate::gui::puzzle_params::build_puzzle_params_window(self, ctx);
 
         ctx.request_repaint();
+    }
+
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        [0.0, 0.0, 0.0, 0.0]
     }
 }

@@ -1,3 +1,4 @@
+pub mod axis_definitions;
 pub mod controls;
 pub mod gap_console;
 pub mod orbit_analysis;
