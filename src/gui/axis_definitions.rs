@@ -1213,7 +1213,15 @@ pub fn build_axis_definitions_window(app: &mut PuzzleApp, ctx: &egui::Context) {
 
     if changed {
         app.axis_defs.resolve_all();
-        // Bubble changes to puzzle params
+        // Sync n_match values in puzzle params before spawning worker,
+        // so the geometry worker sees the updated n values immediately
+        for entry in &mut app.params.axes {
+            if entry.n_match
+                && let Some(matched_n) = app.axis_defs.get_wills_n_for_axis(&entry.axis_name)
+            {
+                entry.n = matched_n;
+            }
+        }
         app.spawn_geometry_worker();
         if let Some(three) = &app.three {
             let axes = app.build_axes();
