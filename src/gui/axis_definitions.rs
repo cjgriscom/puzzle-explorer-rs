@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use egui::Button;
 use glam::{DAffine3, DVec3};
 use indexmap::IndexMap;
 use puzzle_explorer_math::geometry::derive_axis_angle;
@@ -401,28 +402,19 @@ impl AxisDefinitions {
 
         // Topological sort via Kahn's algorithm
         let names: Vec<String> = self.definitions.keys().cloned().collect();
-        let builtins: HashSet<String> = ["X", "Y", "Z"].iter().map(|s| s.to_string()).collect();
+        let builtins: HashSet<String> = axis_map.iter().map(|s| s.0.to_string()).collect();
 
         // Build in-degree map (only counting edges within user-defined axes)
         let mut in_degree: HashMap<String, usize> = HashMap::new();
         for name in &names {
             in_degree.insert(name.clone(), 0);
         }
-        for (name, axis) in &self.definitions {
-            let _ = name;
-            for dep in axis.dependencies() {
-                // Strip sub-index suffix (e.g. "Foo_1" -> "Foo") for dependency resolution
-                let base = strip_sub_index(&dep);
-                if !builtins.contains(&base) && self.definitions.contains_key(&base) {
-                    // dep's base definition must be resolved before `name`
-                    // but we track in-degree on `name`, not on dep
-                }
-            }
-        }
-        // Recompute properly: for each axis, count how many UNIQUE base deps are user-defined
+
+        // For each axis, count how many UNIQUE base deps are user-defined
         for (name, axis) in &self.definitions {
             let mut base_deps: HashSet<String> = HashSet::new();
             for dep in axis.dependencies() {
+                // TODO Strip sub-index suffix... ideally this should resolve to the base in a better way
                 let base = strip_sub_index(&dep);
                 if !builtins.contains(&base) && self.definitions.contains_key(&base) {
                     base_deps.insert(base);
@@ -687,7 +679,7 @@ impl AxisDefinitions {
     }
 }
 
-/// Strip a sub-index suffix (e.g. "Foo_1" -> "Foo", "Bar" -> "Bar").
+/// Strip a sub-index suffix (e.g. "Trapentrix_A" -> "Trapentrix", "X" -> "X", "Pattern_1" -> "Pattern")
 fn strip_sub_index(name: &str) -> String {
     if let Some(idx) = name.rfind('_') {
         let suffix = &name[idx + 1..];
@@ -754,22 +746,29 @@ pub fn build_axis_definitions_window(app: &mut PuzzleApp, ctx: &egui::Context) {
         .show(ctx, |ui| {
             // Toolbar
             ui.horizontal(|ui| {
-                if ui.button("Hide All").clicked() {
+                if ui.button("Hide All").clicked() && !app.axis_defs.visible.is_empty() {
                     app.axis_defs.visible.clear();
-                }
-                if ui.button("Show All").clicked() {
-                    for name in app.axis_defs.definitions.keys() {
-                        app.axis_defs.visible.insert(name.clone());
-                    }
-                }
-                if ui.button("New Axis").clicked() {
-                    let name = app.axis_defs.generate_name();
-                    app.axis_defs
-                        .definitions
-                        .insert(name.clone(), DerivedAxis::default_for_variant(0));
-                    app.axis_defs.visible.insert(name);
                     changed = true;
                 }
+
+                if ui.button("Show All").clicked() {
+                    for name in app.axis_defs.definitions.keys() {
+                        if app.axis_defs.visible.insert(name.clone()) {
+                            changed = true;
+                        }
+                    }
+                }
+
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("+ New Axis").clicked() {
+                        let name = app.axis_defs.generate_name();
+                        app.axis_defs
+                            .definitions
+                            .insert(name.clone(), DerivedAxis::default_for_variant(0));
+                        app.axis_defs.visible.insert(name);
+                        changed = true;
+                    }
+                });
             });
 
             // Snapshot keys for iteration (avoids borrow issues)
@@ -821,37 +820,52 @@ pub fn build_axis_definitions_window(app: &mut PuzzleApp, ctx: &egui::Context) {
                             label_resp.on_hover_text(&err_text);
                         }
 
-                        // Type dropdown in header
-                        let mut new_variant_idx = current_variant_idx;
-                        egui::ComboBox::from_id_salt(format!("type_{}", name))
-                            .selected_text(VARIANT_LABELS[current_variant_idx])
-                            .show_ui(ui, |ui| {
-                                for (i, label) in VARIANT_LABELS.iter().enumerate() {
-                                    if ui
-                                        .selectable_label(i == current_variant_idx, *label)
-                                        .clicked()
-                                        && i != current_variant_idx
-                                    {
-                                        new_variant_idx = i;
-                                    }
-                                }
-                            });
-                        if new_variant_idx != current_variant_idx
-                            && let Some(axis) = app.axis_defs.definitions.get_mut(name)
-                        {
-                            *axis = DerivedAxis::default_for_variant(new_variant_idx);
-                            changed = true;
-                        }
-
                         // Push buttons to the right
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             // Delete button
-                            if ui.small_button("🗑").clicked() {
+                            if ui.add(Button::new("🗑")).clicked() {
                                 app.axis_defs.pending_delete = Some(name.clone());
                             }
+
                             // Rename button
-                            if ui.small_button("✏").clicked() {
+                            if ui.add(Button::new("✏")).clicked() {
                                 app.axis_defs.rename_state = Some((name.clone(), name.clone()));
+                            }
+
+                            // Visible toggle
+                            let is_visible = app.axis_defs.visible.contains(name);
+                            if ui
+                                .add(Button::new("👁").selected(is_visible).frame(true))
+                                .clicked()
+                            {
+                                if !is_visible {
+                                    app.axis_defs.visible.insert(name.clone());
+                                } else {
+                                    app.axis_defs.visible.remove(name);
+                                }
+                                changed = true;
+                            }
+
+                            // Type dropdown
+                            let mut new_variant_idx = current_variant_idx;
+                            egui::ComboBox::from_id_salt(format!("type_{}", name))
+                                .selected_text(VARIANT_LABELS[current_variant_idx])
+                                .show_ui(ui, |ui| {
+                                    for (i, label) in VARIANT_LABELS.iter().enumerate() {
+                                        if ui
+                                            .selectable_label(i == current_variant_idx, *label)
+                                            .clicked()
+                                            && i != current_variant_idx
+                                        {
+                                            new_variant_idx = i;
+                                        }
+                                    }
+                                });
+                            if new_variant_idx != current_variant_idx
+                                && let Some(axis) = app.axis_defs.definitions.get_mut(name)
+                            {
+                                *axis = DerivedAxis::default_for_variant(new_variant_idx);
+                                changed = true;
                             }
                         });
                     });
@@ -1192,21 +1206,6 @@ pub fn build_axis_definitions_window(app: &mut PuzzleApp, ctx: &egui::Context) {
                                 });
                             }
                         }
-
-                        // Show/Hide toggle
-                        ui.add_space(4.0);
-                        let mut is_visible = app.axis_defs.visible.contains(name);
-                        ui.horizontal(|ui| {
-                            if ui.add(crate::gui::toggle(&mut is_visible)).changed() {
-                                if is_visible {
-                                    app.axis_defs.visible.insert(name.clone());
-                                } else {
-                                    app.axis_defs.visible.remove(name);
-                                }
-                                changed = true;
-                            }
-                            ui.label("Visible");
-                        });
                     });
                 }
             });

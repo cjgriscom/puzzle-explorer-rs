@@ -6,16 +6,17 @@ pub mod puzzle_params;
 
 // --- Constants ---
 pub const AXIS_DEFINITIONS_POS: [f32; 2] = [20.0, 20.0];
-pub const PUZZLE_PARAMS_POS: [f32; 2] = [20.0, 220.0];
-pub const ORBIT_ANALYSIS_POS: [f32; 2] = [370.0, 20.0];
-pub const CONTROLS_POS: [f32; 2] = [720.0, 70.0];
-pub const GAP_CONSOLE_POS: [f32; 2] = [720.0, 20.0];
+pub const PUZZLE_PARAMS_POS: [f32; 2] = [20.0, 205.0];
+pub const ORBIT_ANALYSIS_POS: [f32; 2] = [20.0, 430.0];
+pub const GAP_CONSOLE_POS: [f32; 2] = [460.0, 20.0];
+pub const CONTROLS_POS: [f32; 2] = [460.0, 70.0];
 
-pub const AXIS_DEFINITIONS_WIDTH: f32 = 320.0;
-pub const PUZZLE_PARAMS_WIDTH: f32 = 320.0;
-pub const ORBIT_ANALYSIS_WIDTH: f32 = 320.0;
+pub const AXIS_DEFINITIONS_WIDTH: f32 = 400.0;
+pub const PUZZLE_PARAMS_WIDTH: f32 = 400.0;
+pub const ORBIT_ANALYSIS_WIDTH: f32 = 400.0;
 pub const GAP_CONSOLE_WIDTH: f32 = 500.0;
 
+pub const MAX_PUZZLE_AXES: usize = 26;
 pub const MIN_N: u32 = 2;
 pub const MAX_N: u32 = 8;
 pub const MIN_COLAT: f32 = 10.0;

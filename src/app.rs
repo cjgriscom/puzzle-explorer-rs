@@ -225,13 +225,10 @@ impl ThreeState {
     pub fn update_axis_indicators(
         &self,
         axes: &[Option<crate::puzzle::AxisDef>],
-        visible: bool,
+        puzzle_axes_visible: bool,
         def_vectors: &[glam::DVec3],
     ) {
         crate::three::dispose_group_children(&self.axis_group);
-        if !visible {
-            return;
-        }
         let len = DISP_R as f32 * 1.3;
         // Render visible definition axes in grey
         let grey: u32 = 0x888888;
@@ -242,6 +239,9 @@ impl ThreeState {
                 [d.x as f32 * len, d.y as f32 * len, d.z as f32 * len],
             ];
             self.add_line_to_group(&self.axis_group, &points, 1.0, false, grey);
+        }
+        if !puzzle_axes_visible {
+            return;
         }
         // Render puzzle axes in color
         for (i, axis) in axes.iter().enumerate() {
