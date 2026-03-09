@@ -26,9 +26,10 @@ pub enum WorkerResponse {
 }
 
 /// Convert AxisDef params (degrees, [f64;3]) to the internal math tuple (DVec3, radians, n).
-fn cvt_axis_defs(params_axes: &[crate::puzzle::AxisDef]) -> Vec<(DVec3, f64, u32)> {
+fn cvt_axis_defs(params_axes: &[Option<crate::puzzle::AxisDef>]) -> Vec<(DVec3, f64, u32)> {
     params_axes
         .iter()
+        .filter_map(|a| a.as_ref())
         .map(|a| {
             (
                 DVec3::new(a.direction[0], a.direction[1], a.direction[2]),

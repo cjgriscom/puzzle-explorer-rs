@@ -1,5 +1,6 @@
 use crate::app::PuzzleApp;
 use crate::gap::GapState;
+use crate::gui::{GAP_CONSOLE_POS, GAP_CONSOLE_WIDTH};
 
 pub fn build_gap_console_window(app: &mut PuzzleApp, ctx: &egui::Context) {
     let gap_title = match &app.gap_manager.state {
@@ -10,8 +11,8 @@ pub fn build_gap_console_window(app: &mut PuzzleApp, ctx: &egui::Context) {
 
     egui::Window::new(gap_title)
         .id("GAP Console".into()) // unchanging ID
-        .default_pos([500.0, 50.0])
-        .default_width(500.0)
+        .default_pos(GAP_CONSOLE_POS)
+        .default_width(GAP_CONSOLE_WIDTH)
         .default_open(false)
         .show(ctx, |ui| match &app.gap_manager.state {
             GapState::NotStarted => {

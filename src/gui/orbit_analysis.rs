@@ -1,13 +1,15 @@
 use crate::app::PuzzleApp;
 use crate::gap::GapManager;
 use crate::gui::toggle;
+use crate::gui::{ORBIT_ANALYSIS_POS, ORBIT_ANALYSIS_WIDTH};
 
 pub fn build_orbit_analysis_window(app: &mut PuzzleApp, ctx: &egui::Context) {
     let buttons_enabled = app.anim.is_none();
 
     // Orbit Analysis Window
     egui::Window::new("Orbit Analysis")
-        .default_pos([50.0, 350.0])
+        .default_pos(ORBIT_ANALYSIS_POS)
+        .default_width(ORBIT_ANALYSIS_WIDTH)
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if ui
@@ -177,7 +179,7 @@ pub fn build_orbit_analysis_window(app: &mut PuzzleApp, ctx: &egui::Context) {
 
                     orbits_with_members
                         .sort_by_key(|(_, _, members)| -(members.len() as isize));
-
+                    
                     for (oi, color_idx, members) in orbits_with_members {
                         let c = crate::color::ORBIT_COLORS
                             [color_idx % crate::color::ORBIT_COLORS.len()];

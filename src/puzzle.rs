@@ -13,7 +13,7 @@ pub struct AxisDef {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct GeometryParams {
-    pub axes: Vec<AxisDef>,
+    pub axes: Vec<Option<AxisDef>>,
     pub max_iterations_cap: Option<u32>,
 }
 
@@ -32,7 +32,7 @@ pub struct PolyLine {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OrbitParams {
-    pub axes: Vec<AxisDef>,
+    pub axes: Vec<Option<AxisDef>>,
     pub max_iterations_cap: Option<u32>,
     pub fudged_mode: bool,
     pub min_piece_angle_deg: f32,

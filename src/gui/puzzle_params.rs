@@ -1,20 +1,23 @@
-use crate::app::{
-    AXIS_ANGLE_DECIMALS, AXIS_ANGLE_SPEED, COLAT_DECIMALS, COLAT_SPEED, COLAT_STEP, MAX_COLAT,
-    MAX_N, MIN_COLAT, MIN_N, PuzzleApp,
+use crate::app::PuzzleApp;
+use crate::gui::AxisEntry;
+use crate::gui::{
+    COLAT_DECIMALS, COLAT_SPEED, COLAT_STEP, MAX_COLAT, MAX_N, MIN_COLAT, MIN_N, PUZZLE_PARAMS_POS,
+    PUZZLE_PARAMS_WIDTH,
 };
-use puzzle_explorer_math::geometry::derive_axis_angle;
 
 pub fn build_puzzle_params_window(app: &mut PuzzleApp, ctx: &egui::Context) {
     let buttons_enabled = app.anim.is_none();
 
     egui::Window::new("Puzzle Parameters")
-        .default_pos([50.0, 50.0])
+        .default_pos(PUZZLE_PARAMS_POS)
+        .default_width(PUZZLE_PARAMS_WIDTH)
         .show(ctx, |ui| {
             // Bigger slider than default
             ui.spacing_mut().slider_width = 250.0;
 
             let mut changed = false;
 
+            // Show axes toggle
             ui.horizontal(|ui| {
                 if ui
                     .add(crate::gui::toggle(&mut app.params.show_axes))
@@ -22,282 +25,218 @@ pub fn build_puzzle_params_window(app: &mut PuzzleApp, ctx: &egui::Context) {
                     && let Some(three) = &app.three
                 {
                     let axes = app.build_axes();
-                    three.update_axis_indicators(&axes, app.params.show_axes);
+                    let def_vecs = app.axis_defs.get_visible_vectors();
+                    three.update_axis_indicators(&axes, app.params.show_axes, &def_vecs);
                 }
                 ui.label("Show axes");
             });
 
+            // Max iterations
             ui.horizontal(|ui| {
-                ui.label("nA:");
-                egui::ComboBox::from_id_salt("nA")
-                    .selected_text(format!("{}", app.params.n_a))
-                    .show_ui(ui, |ui| {
-                        for i in MIN_N..=MAX_N {
-                            if ui
-                                .selectable_value(&mut app.params.n_a, i, format!("{}", i))
-                                .changed()
-                            {
-                                changed = true;
-                            }
-                        }
-                    });
-                ui.label("nB:");
-                egui::ComboBox::from_id_salt("nB")
-                    .selected_text(format!("{}", app.params.n_b))
-                    .show_ui(ui, |ui| {
-                        for i in MIN_N..=MAX_N {
-                            if ui
-                                .selectable_value(&mut app.params.n_b, i, format!("{}", i))
-                                .changed()
-                            {
-                                changed = true;
-                            }
-                        }
-                    });
-            });
-
-            ui.horizontal(|ui| {
-                ui.label("Manual Axis Angle");
+                ui.label("Max Iterations:");
                 if ui
-                    .add(crate::gui::toggle(&mut app.params.manual_axis_angle))
+                    .add(
+                        egui::DragValue::new(&mut app.params.max_iterations)
+                            .range(1..=150)
+                            .speed(0.1),
+                    )
                     .changed()
                 {
-                    // Sync: when switching to manual, populate from current p/q
-                    if app.params.manual_axis_angle
-                        && let Some(ang) = derive_axis_angle(
-                            app.params.n_a,
-                            app.params.n_b,
-                            app.params.p,
-                            app.params.q,
-                        )
-                    {
-                        app.params.manual_axis_angle_deg =
-                            (ang.to_degrees() * 10000.0).round() / 10000.0;
-                    }
-
                     changed = true;
                 }
             });
 
-            if app.params.manual_axis_angle {
-                ui.horizontal(|ui| {
-                    ui.label("Axis Angle:");
-                    if ui
-                        .add(
-                            egui::DragValue::new(&mut app.params.manual_axis_angle_deg)
-                                .range(0.0..=180.0)
-                                .speed(AXIS_ANGLE_SPEED)
-                                .fixed_decimals(AXIS_ANGLE_DECIMALS)
-                                .suffix("°"),
-                        )
-                        .changed()
-                    {
-                        changed = true;
-                    }
-                    ui.separator();
-                    ui.label("Max Iterations:");
-                    if ui
-                        .add(
-                            egui::DragValue::new(&mut app.params.manual_max_iterations)
-                                .range(1..=150)
-                                .speed(0.1),
-                        )
-                        .changed()
-                    {
-                        changed = true;
-                    }
-                });
-            } else {
-                ui.horizontal(|ui| {
-                    ui.label("p/q:");
-
-                    if ui
-                        .add(
-                            egui::DragValue::new(&mut app.params.p)
-                                .range(1..=20)
-                                .speed(0.02),
-                        )
-                        .changed()
-                    {
-                        changed = true;
-                    }
-
-                    ui.label("/");
-
-                    if ui
-                        .add(
-                            egui::DragValue::new(&mut app.params.q)
-                                .range(2..=30)
-                                .speed(0.02),
-                        )
-                        .changed()
-                    {
-                        changed = true;
-                    }
-
-                    if let Some(ang) = derive_axis_angle(
-                        app.params.n_a,
-                        app.params.n_b,
-                        app.params.p,
-                        app.params.q,
-                    ) {
-                        ui.label(format!("Cut: {:.4}\u{00B0}", ang.to_degrees()));
-                    }
-                });
-            }
-
             ui.separator();
 
-            if ui
-                .checkbox(&mut app.params.lock_cuts, "Lock cuts together")
-                .changed()
-                && app.params.lock_cuts
-            {
-                app.params.colat_b = app.params.colat_a;
-                for ea in &mut app.params.extra_axes {
-                    ea.colat = app.params.colat_a;
-                }
-                changed = true;
-            }
-
-            ui.label(format!("Cut A: {:.1}\u{00B0}", app.params.colat_a));
-            if ui
-                .add(
-                    egui::Slider::new(&mut app.params.colat_a, MIN_COLAT..=MAX_COLAT)
-                        .smallest_positive(COLAT_STEP)
-                        .fixed_decimals(COLAT_DECIMALS)
-                        .step_by(COLAT_STEP)
-                        .drag_value_speed(COLAT_SPEED)
-                        .show_value(true)
-                        .trailing_fill(true),
-                )
-                .changed()
-            {
-                if app.params.lock_cuts {
-                    app.params.colat_b = app.params.colat_a;
-                    for ea in &mut app.params.extra_axes {
-                        ea.colat = app.params.colat_a;
-                    }
-                }
-                changed = true;
-            }
-
-            ui.label(format!("Cut B: {:.1}\u{00B0}", app.params.colat_b));
-            ui.add_enabled_ui(!app.params.lock_cuts, |ui| {
+            // Lock cuts toggle (slider style)
+            ui.horizontal(|ui| {
                 if ui
-                    .add(
-                        egui::Slider::new(&mut app.params.colat_b, MIN_COLAT..=MAX_COLAT)
-                            .smallest_positive(COLAT_STEP)
-                            .fixed_decimals(COLAT_DECIMALS)
-                            .step_by(COLAT_STEP)
-                            .drag_value_speed(COLAT_SPEED)
-                            .show_value(true)
-                            .trailing_fill(true),
-                    )
+                    .add(crate::gui::toggle(&mut app.params.lock_cuts))
                     .changed()
+                    && app.params.lock_cuts
                 {
-                    if app.params.lock_cuts {
-                        app.params.colat_a = app.params.colat_b;
-                        for ea in &mut app.params.extra_axes {
-                            ea.colat = app.params.colat_b;
+                    // Sync all colats to first axis
+                    if let Some(first_colat) = app.params.axes.first().map(|a| a.colat) {
+                        for entry in &mut app.params.axes {
+                            entry.colat = first_colat;
                         }
                     }
                     changed = true;
                 }
+                ui.label("Lock cuts together");
             });
-
-            if changed {
-                app.spawn_geometry_worker();
-            }
 
             ui.separator();
 
-            // --- Additional Axes (Experimental) ---
-            let mut extra_changed = false;
-            ui.horizontal(|ui| {
-                ui.label("Additional axes:");
-                if ui
-                    .add(
-                        egui::DragValue::new(&mut app.params.num_extra_axes)
-                            .range(0..=5)
-                            .speed(0.05),
-                    )
-                    .changed()
-                {
-                    let n = app.params.num_extra_axes as usize;
-                    while app.params.extra_axes.len() < n {
-                        let mut new_axis = crate::gui::ExtraAxisParams::default();
-                        if app.params.lock_cuts {
-                            new_axis.colat = app.params.colat_a;
-                        }
-                        app.params.extra_axes.push(new_axis);
-                    }
-                    app.params.extra_axes.truncate(n);
-                    extra_changed = true;
-                }
-                ui.label("(experimental)");
-            });
+            // Get available axis names from axis definitions
+            let available_names = app.axis_defs.available_axis_names();
 
-            let axis_labels = ['C', 'D', 'E', 'F', 'G'];
-            for idx in 0..app.params.extra_axes.len() {
-                ui.separator();
+            // Per-axis entries
+            let axis_labels: Vec<char> = ('A'..='Z').collect();
+            let num_axes = app.params.axes.len();
+            let mut to_remove: Option<usize> = None;
 
+            for idx in 0..num_axes {
                 let label = axis_labels.get(idx).copied().unwrap_or('?');
+
+                // Check if axis name is valid (exists and resolves OK)
+                let axis_name = app.params.axes[idx].axis_name.clone();
+                let name_ok = is_axis_ok(&axis_name, &app.axis_defs);
+
+                // Check if this axis references a WillsEquation definition
+                let wills_n = app.axis_defs.get_wills_n_for_axis(&axis_name);
+
+                // If n_match is on, sync n from the definition
+                if app.params.axes[idx].n_match {
+                    if let Some(matched_n) = wills_n {
+                        if app.params.axes[idx].n != matched_n {
+                            app.params.axes[idx].n = matched_n;
+                            changed = true;
+                        }
+                    } else {
+                        // No longer a WillsEquation reference, turn off n_match
+                        app.params.axes[idx].n_match = false;
+                    }
+                }
+
                 ui.horizontal(|ui| {
+                    // Enabled toggle
+                    if ui
+                        .add(crate::gui::toggle_with_color(
+                            &mut app.params.axes[idx].enabled,
+                            crate::color::color32(&crate::color::axis_color(idx)),
+                        ))
+                        .changed()
+                    {
+                        changed = true;
+                    }
+
+                    // Axis label
                     ui.label(format!("n{}:", label));
-                    egui::ComboBox::from_id_salt(format!("n{}", label))
-                        .selected_text(format!("{}", app.params.extra_axes[idx].n))
+
+                    // n (fold symmetry) combo - with "Match" option for WillsEquation axes
+                    let n_display = if app.params.axes[idx].n_match
+                        && let Some(matched_n) = wills_n
+                    {
+                        format!("Match ({})", matched_n)
+                    } else {
+                        format!("{}", app.params.axes[idx].n)
+                    };
+                    egui::ComboBox::from_id_salt(format!("n_{}", idx))
+                        .selected_text(&n_display)
                         .show_ui(ui, |ui| {
+                            // "Match" option (only for WillsEquation axes)
+                            if let Some(matched_n) = wills_n {
+                                let mut match_val = app.params.axes[idx].n_match;
+                                if ui
+                                    .selectable_label(match_val, format!("Match ({})", matched_n))
+                                    .clicked()
+                                {
+                                    match_val = !match_val;
+                                    app.params.axes[idx].n_match = match_val;
+                                    if match_val {
+                                        app.params.axes[idx].n = matched_n;
+                                    }
+                                    changed = true;
+                                }
+                            }
                             for i in MIN_N..=MAX_N {
                                 if ui
                                     .selectable_value(
-                                        &mut app.params.extra_axes[idx].n,
+                                        &mut app.params.axes[idx].n,
                                         i,
                                         format!("{}", i),
                                     )
                                     .changed()
                                 {
-                                    extra_changed = true;
+                                    app.params.axes[idx].n_match = false;
+                                    changed = true;
                                 }
                             }
                         });
-                    ui.label("Pitch:");
-                    if ui
-                        .add(
-                            egui::DragValue::new(&mut app.params.extra_axes[idx].pitch_deg)
-                                .range(0.0..=180.0)
-                                .speed(AXIS_ANGLE_SPEED)
-                                .fixed_decimals(AXIS_ANGLE_DECIMALS)
-                                .suffix("°"),
-                        )
-                        .changed()
-                    {
-                        extra_changed = true;
+
+                    // Axis name dropdown (colored)
+                    let name_color = if axis_name.is_empty() {
+                        egui::Color32::GRAY
+                    } else if name_ok {
+                        ui.visuals().text_color()
+                    } else {
+                        egui::Color32::from_rgb(255, 80, 80)
+                    };
+                    let display_label = if axis_name.is_empty() {
+                        "(none)".to_string()
+                    } else {
+                        axis_name.clone()
+                    };
+                    let display_text = egui::RichText::new(&display_label).color(name_color);
+
+                    let prev_name = app.params.axes[idx].axis_name.clone();
+                    egui::ComboBox::from_id_salt(format!("axis_name_{}", idx))
+                        .selected_text(display_text)
+                        .show_ui(ui, |ui| {
+                            // Blank option
+                            if ui
+                                .selectable_value(
+                                    &mut app.params.axes[idx].axis_name,
+                                    String::new(),
+                                    "(none)",
+                                )
+                                .changed()
+                            {
+                                changed = true;
+                            }
+                            for name in &available_names {
+                                if ui
+                                    .selectable_value(
+                                        &mut app.params.axes[idx].axis_name,
+                                        name.clone(),
+                                        name,
+                                    )
+                                    .changed()
+                                {
+                                    changed = true;
+                                }
+                            }
+                        });
+                    // Auto-enable Match when selecting a WillsEquation axis
+                    if app.params.axes[idx].axis_name != prev_name {
+                        if let Some(matched_n) = app
+                            .axis_defs
+                            .get_wills_n_for_axis(&app.params.axes[idx].axis_name)
+                        {
+                            app.params.axes[idx].n_match = true;
+                            app.params.axes[idx].n = matched_n;
+                            changed = true;
+                        } else {
+                            app.params.axes[idx].n_match = false;
+                        }
                     }
-                    ui.label("Yaw:");
-                    if ui
-                        .add(
-                            egui::DragValue::new(&mut app.params.extra_axes[idx].yaw_deg)
-                                .range(-180.0..=180.0)
-                                .speed(AXIS_ANGLE_SPEED)
-                                .fixed_decimals(AXIS_ANGLE_DECIMALS)
-                                .suffix("°"),
-                        )
-                        .changed()
+
+                    // Per-frame sync for n_match
+                    if app.params.axes[idx].n_match
+                        && let Some(matched_n) = app
+                            .axis_defs
+                            .get_wills_n_for_axis(&app.params.axes[idx].axis_name)
+                        && app.params.axes[idx].n != matched_n
                     {
-                        extra_changed = true;
+                        app.params.axes[idx].n = matched_n;
+                        changed = true;
                     }
+
+                    // Delete button (disabled if only 1 axis)
+                    ui.add_enabled_ui(num_axes > 1, |ui| {
+                        if ui.small_button("🗑").clicked() {
+                            to_remove = Some(idx);
+                        }
+                    });
                 });
 
-                ui.label(format!(
-                    "Cut {}: {:.1}\u{00B0}",
-                    label, app.params.extra_axes[idx].colat
-                ));
-                ui.add_enabled_ui(!app.params.lock_cuts, |ui| {
+                // Colat slider
+                ui.add_enabled_ui(!app.params.lock_cuts || idx == 0, |ui| {
                     if ui
                         .add(
                             egui::Slider::new(
-                                &mut app.params.extra_axes[idx].colat,
+                                &mut app.params.axes[idx].colat,
                                 MIN_COLAT..=MAX_COLAT,
                             )
                             .smallest_positive(COLAT_STEP)
@@ -309,36 +248,67 @@ pub fn build_puzzle_params_window(app: &mut PuzzleApp, ctx: &egui::Context) {
                         )
                         .changed()
                     {
-                        extra_changed = true;
+                        if app.params.lock_cuts {
+                            // Sync all colats from this slider
+                            let new_colat = app.params.axes[idx].colat;
+                            for entry in &mut app.params.axes {
+                                entry.colat = new_colat;
+                            }
+                        }
+                        changed = true;
                     }
                 });
+
+                ui.separator();
             }
 
-            if extra_changed {
-                app.spawn_geometry_worker();
-                if let Some(three) = &app.three {
-                    let axes = app.build_axes();
-                    three.update_axis_indicators(&axes, app.params.show_axes);
+            // Handle removal
+            if let Some(idx) = to_remove {
+                app.params.axes.remove(idx);
+                changed = true;
+            }
+
+            // Add axis button
+            if ui.button("+ Add Axis").clicked() {
+                let mut new_entry = AxisEntry::default();
+                if app.params.lock_cuts
+                    && let Some(first_colat) = app.params.axes.first().map(|a| a.colat)
+                {
+                    new_entry.colat = first_colat;
                 }
+                app.params.axes.push(new_entry);
+                changed = true;
+            }
+
+            if changed {
+                app.spawn_geometry_worker();
             }
 
             ui.separator();
 
+            // Rotation buttons
             ui.add_enabled_ui(buttons_enabled, |ui| {
+                let axis_count = app.params.axes.len();
                 ui.horizontal(|ui| {
-                    if ui.button("Rotate A").clicked() {
-                        app.start_rotation(0, true);
-                    }
-                    if ui.button("A'").clicked() {
-                        app.start_rotation(0, false);
-                    }
-                    if ui.button("Rotate B").clicked() {
-                        app.start_rotation(1, true);
-                    }
-                    if ui.button("B'").clicked() {
-                        app.start_rotation(1, false);
+                    for idx in 0..axis_count.min(3) {
+                        let label = axis_labels.get(idx).copied().unwrap_or('?');
+                        if ui.button(format!("Rotate {}", label)).clicked() {
+                            app.start_rotation(idx, true);
+                        }
+                        if ui.button(format!("{}'", label)).clicked() {
+                            app.start_rotation(idx, false);
+                        }
                     }
                 });
             });
         });
+}
+
+/// Check if an axis name resolves to a valid (single) vector.
+fn is_axis_ok(name: &str, axis_defs: &crate::gui::axis_definitions::AxisDefinitions) -> bool {
+    match name {
+        "" => false,
+        "X" | "Y" | "Z" => true,
+        _ => axis_defs.get_resolved_vector(name).is_some(),
+    }
 }

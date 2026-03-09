@@ -23,6 +23,18 @@ pub const ORBIT_COLORS: &[(&str, [f32; 3])] = &[
 
 pub const SINGLETON_COLOR: (&str, [f32; 3]) = ("Gray", [0.41, 0.41, 0.41]);
 
+pub fn axis_color(idx: usize) -> [f32; 3] {
+    ORBIT_COLORS[idx % ORBIT_COLORS.len()].1
+}
+
+pub fn color32(c: &[f32; 3]) -> egui::Color32 {
+    egui::Color32::from_rgb(
+        (c[0] * 255.0) as u8,
+        (c[1] * 255.0) as u8,
+        (c[2] * 255.0) as u8,
+    )
+}
+
 pub fn color_to_hex(c: &[f32; 3]) -> u32 {
     let r = (c[0] * 255.0) as u32;
     let g = (c[1] * 255.0) as u32;

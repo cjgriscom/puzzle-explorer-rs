@@ -43,6 +43,7 @@ wasm-bindgen-futures = "0.4"
 serde = { version = "1.0.228", features = ["derive"] }
 serde-wasm-bindgen = "0.6.5"
 glam.workspace = true
+indexmap = "2"
 
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = true

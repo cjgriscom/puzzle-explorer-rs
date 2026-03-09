@@ -1,6 +1,8 @@
+use crate::gui::CONTROLS_POS;
+
 pub fn build_controls_window(ctx: &egui::Context) {
     egui::Window::new("Controls")
-        .default_pos([500.0, 100.0])
+        .default_pos(CONTROLS_POS)
         .default_open(false)
         .show(ctx, |ui| {
             ui.label("Mouse controls:");

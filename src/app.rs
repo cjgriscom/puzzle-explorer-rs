@@ -6,12 +6,12 @@ use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, MessageEvent, Worker, WorkerOptions, window};
 
 use puzzle_explorer_math::circle::Circle;
-use puzzle_explorer_math::geometry::derive_axis_angle;
 use puzzle_explorer_math::math::TAU;
 
 use crate::color::{ORBIT_COLORS, SINGLETON_COLOR, color_to_hex};
 use crate::dreadnaut::DreadnautManager;
 use crate::gap::GapManager;
+use crate::gui::axis_definitions::AxisDefinitions;
 use crate::gui::{OrbitAnalysisState, PuzzleParams};
 use crate::input::{CameraInputState, handle_camera_input};
 use crate::puzzle::{AxisDef, GeometryParams, GeometryResult, OrbitParams, OrbitResult, PolyLine};
@@ -27,16 +27,6 @@ use crate::worker::{WorkerMessage, WorkerResponse};
 const R: f64 = 1.0; // Radius of sphere
 const DISP_R: f64 = R * 1.004; // Dist of arcs from sphere
 const LABEL_R: f64 = R * 1.04; // Dist. of orbit labels from sphere
-
-pub(crate) const MIN_N: u32 = 2;
-pub(crate) const MAX_N: u32 = 8;
-pub(crate) const MIN_COLAT: f32 = 10.0;
-pub(crate) const MAX_COLAT: f32 = 170.0;
-pub(crate) const COLAT_STEP: f64 = 0.1;
-pub(crate) const COLAT_DECIMALS: usize = 1;
-pub(crate) const COLAT_SPEED: f64 = 0.05;
-pub(crate) const AXIS_ANGLE_SPEED: f64 = 0.01;
-pub(crate) const AXIS_ANGLE_DECIMALS: usize = 4;
 
 // --- Animation State ---
 
@@ -232,13 +222,33 @@ impl ThreeState {
         }
     }
 
-    pub fn update_axis_indicators(&self, axes: &[crate::puzzle::AxisDef], visible: bool) {
+    pub fn update_axis_indicators(
+        &self,
+        axes: &[Option<crate::puzzle::AxisDef>],
+        visible: bool,
+        def_vectors: &[glam::DVec3],
+    ) {
         crate::three::dispose_group_children(&self.axis_group);
         if !visible {
             return;
         }
         let len = DISP_R as f32 * 1.3;
+        // Render visible definition axes in grey
+        let grey: u32 = 0x888888;
+        for v in def_vectors {
+            let d = v.normalize();
+            let points = [
+                [0.0, 0.0, 0.0],
+                [d.x as f32 * len, d.y as f32 * len, d.z as f32 * len],
+            ];
+            self.add_line_to_group(&self.axis_group, &points, 1.0, false, grey);
+        }
+        // Render puzzle axes in color
         for (i, axis) in axes.iter().enumerate() {
+            let axis = match axis {
+                Some(a) => a,
+                None => continue,
+            };
             let color = crate::color::color_to_hex(&ORBIT_COLORS[i % ORBIT_COLORS.len()].1);
             let d = axis.direction;
             let points = [
@@ -483,6 +493,7 @@ pub struct PuzzleApp {
     build_hash: String,
     pub(crate) params: PuzzleParams,
     pub(crate) orbit_state: OrbitAnalysisState,
+    pub(crate) axis_defs: AxisDefinitions,
     pub(crate) three: Option<ThreeState>,
     worker: Option<Worker>,
     task_start_time: Option<f64>,
@@ -525,6 +536,7 @@ impl PuzzleApp {
             build_hash: build_hash.clone(),
             params: PuzzleParams::default(),
             orbit_state: OrbitAnalysisState::default(),
+            axis_defs: AxisDefinitions::default(),
             three,
             worker: None,
             task_start_time: None,
@@ -551,6 +563,8 @@ impl PuzzleApp {
             gap_cache: std::collections::HashMap::new(),
         };
 
+        // Resolve default axis definitions before default puzzle params
+        app.axis_defs.resolve_all();
         app.init_worker(&build_hash);
         app.dreadnaut_data.init(cc.egui_ctx.clone());
         app.gap_manager.init(cc.egui_ctx.clone());
@@ -657,62 +671,39 @@ impl PuzzleApp {
         }
     }
 
-    fn axis_angle_override(&self) -> Option<f64> {
-        if self.params.manual_axis_angle {
-            Some(self.params.manual_axis_angle_deg.to_radians())
-        } else {
-            None
-        }
-    }
-
     fn max_iterations_cap_override(&self) -> Option<u32> {
-        if self.params.manual_axis_angle {
-            Some(self.params.manual_max_iterations.max(1))
-        } else {
-            None
-        }
+        Some(self.params.max_iterations.max(1))
     }
 
-    pub(crate) fn build_axes(&self) -> Vec<AxisDef> {
-        let axis_angle = match self.axis_angle_override().or_else(|| {
-            derive_axis_angle(
-                self.params.n_a,
-                self.params.n_b,
-                self.params.p,
-                self.params.q,
-            )
-        }) {
-            Some(a) => a,
-            None => return vec![],
-        };
+    pub(crate) fn build_axes(&self) -> Vec<Option<AxisDef>> {
+        let mut axes = Vec::new();
+        for entry in &self.params.axes {
+            if !entry.enabled {
+                axes.push(None);
+                continue;
+            }
+            // Look up the direction from resolved axis definitions
+            let direction = if entry.axis_name == "X" {
+                Some(glam::DVec3::X)
+            } else if entry.axis_name == "Y" {
+                Some(glam::DVec3::Y)
+            } else if entry.axis_name == "Z" {
+                Some(glam::DVec3::Z)
+            } else {
+                self.axis_defs.get_resolved_vector(&entry.axis_name)
+            };
 
-        let mut axes = vec![
-            AxisDef {
-                colat: self.params.colat_a,
-                direction: [0.0, 0.0, 1.0],
-                n: self.params.n_a,
-            },
-            AxisDef {
-                colat: self.params.colat_b,
-                direction: [axis_angle.sin(), 0.0, axis_angle.cos()],
-                n: self.params.n_b,
-            },
-        ];
-
-        for ea in &self.params.extra_axes {
-            let pitch = ea.pitch_deg.to_radians();
-            let yaw = ea.yaw_deg.to_radians();
-            axes.push(AxisDef {
-                colat: ea.colat,
-                direction: [
-                    pitch.sin() * yaw.cos(),
-                    pitch.sin() * yaw.sin(),
-                    pitch.cos(),
-                ],
-                n: ea.n,
-            });
+            if let Some(dir) = direction {
+                let d = dir.normalize();
+                axes.push(Some(AxisDef {
+                    colat: entry.colat,
+                    direction: [d.x, d.y, d.z],
+                    n: entry.n,
+                }));
+            } else {
+                axes.push(None);
+            }
         }
-
         axes
     }
 
@@ -723,8 +714,7 @@ impl PuzzleApp {
         }
         let axes = self.build_axes();
         if axes.is_empty() {
-            *self.compute_output.borrow_mut() =
-                "No valid axis angle for these parameters".to_string();
+            *self.compute_output.borrow_mut() = "No axes selected".to_string();
             self.stored_geometry = None;
             return;
         }
@@ -763,8 +753,8 @@ impl PuzzleApp {
 
         let axes = self.build_axes();
         let axis_def = match axes.get(axis_index) {
-            Some(a) => a,
-            None => return,
+            Some(Some(a)) => a,
+            _ => return,
         };
 
         let axis = axis_def.direction;
@@ -854,7 +844,7 @@ impl eframe::App for PuzzleApp {
             let extra_keys = egui::Key::ALL
                 .iter()
                 .skip(egui::Key::A as usize)
-                .take(self.params.num_extra_axes as usize + 2);
+                .take(self.params.axes.len());
             for (ki, key) in extra_keys.enumerate() {
                 if ctx.input(|i| i.key_pressed(*key)) {
                     self.start_rotation(ki, !shift);
@@ -876,7 +866,8 @@ impl eframe::App for PuzzleApp {
                     if let Some(three) = &self.three {
                         three.update_geometry(&data);
                         let axes = self.build_axes();
-                        three.update_axis_indicators(&axes, self.params.show_axes);
+                        let def_vecs = self.axis_defs.get_visible_vectors();
+                        three.update_axis_indicators(&axes, self.params.show_axes, &def_vecs);
                     }
                     self.stored_geometry = Some(data);
 
