@@ -28,7 +28,13 @@ pub fn build_puzzle_params_window(app: &mut PuzzleApp, ctx: &egui::Context) {
                 {
                     let axes = app.build_axes();
                     let def_vecs = app.axis_defs.get_visible_vectors();
-                    three.update_axis_indicators(&axes, app.params.show_axes, &def_vecs);
+                    let builtin_axes = app.axis_defs.get_visible_builtin_axes();
+                    three.update_axis_indicators(
+                        &axes,
+                        app.params.show_axes,
+                        &def_vecs,
+                        &builtin_axes,
+                    );
                 }
                 ui.label("Show axes");
 

@@ -57,6 +57,7 @@ pub enum DerivedAxis {
         target_axis: String,
         n: u32,
         angle_range_deg: f64,
+        invert: bool,
     },
 }
 
@@ -171,6 +172,7 @@ impl DerivedAxis {
                 target_axis,
                 n,
                 angle_range_deg,
+                invert,
             } => {
                 if *n < 2 {
                     return Err("Expected n >= 2".to_string());
@@ -185,7 +187,8 @@ impl DerivedAxis {
                 let target_vec = axis_map
                     .get(target_axis)
                     .ok_or_else(|| format!("Referenced axis '{}' not found", target_axis))?;
-                let angle_range_rad = angle_range_deg.to_radians();
+                let sign = if *invert { -1.0 } else { 1.0 };
+                let angle_range_rad = angle_range_deg.to_radians() * sign;
                 let mut results = Vec::with_capacity(*n as usize);
                 for i in 0..*n {
                     let angle = angle_range_rad * i as f64 / *n as f64;
@@ -284,6 +287,7 @@ impl DerivedAxis {
                 target_axis: "X".to_string(),
                 n: 3,
                 angle_range_deg: 360.0,
+                invert: false,
             },
             _ => DerivedAxis::Vector {
                 x: 1.0,
@@ -352,6 +356,10 @@ pub struct AxisDefinitions {
     pub definitions: IndexMap<String, DerivedAxis>,
     /// Which axes are currently visible.
     pub visible: HashSet<String>,
+    /// Visibility of the builtin X, Y, Z reference axes.
+    pub show_builtin_x: bool,
+    pub show_builtin_y: bool,
+    pub show_builtin_z: bool,
     /// Resolved vectors (includes X, Y, Z and sub-indexed multi-vector results).
     pub resolved: HashMap<String, Result<Vec<DVec3>, String>>,
     /// When Some, a rename dialog is active: (original_name, text_buffer).
@@ -365,6 +373,9 @@ impl Default for AxisDefinitions {
         let mut result = Self {
             definitions: IndexMap::new(),
             visible: HashSet::new(),
+            show_builtin_x: false,
+            show_builtin_y: false,
+            show_builtin_z: false,
             resolved: HashMap::new(),
             rename_state: None,
             pending_delete: None,
@@ -585,6 +596,22 @@ impl AxisDefinitions {
         vecs
     }
 
+    /// Collect visible builtin axis indicators as (vector, color_hex) pairs.
+    pub fn get_visible_builtin_axes(&self) -> Vec<(glam::DVec3, u32)> {
+        use crate::color::{BUILTIN_X_COLOR, BUILTIN_Y_COLOR, BUILTIN_Z_COLOR};
+        let mut result = Vec::new();
+        if self.show_builtin_x {
+            result.push((glam::DVec3::X, BUILTIN_X_COLOR));
+        }
+        if self.show_builtin_y {
+            result.push((glam::DVec3::Y, BUILTIN_Y_COLOR));
+        }
+        if self.show_builtin_z {
+            result.push((glam::DVec3::Z, BUILTIN_Z_COLOR));
+        }
+        result
+    }
+
     /// Generate a unique name at (max N)+1 like "Axis 1"
     pub fn generate_name(&self) -> String {
         let mut max_n = 0u32;
@@ -748,15 +775,67 @@ pub fn build_axis_definitions_window(app: &mut PuzzleApp, ctx: &egui::Context) {
             ui.horizontal(|ui| {
                 if ui.button("Hide All").clicked() && !app.axis_defs.visible.is_empty() {
                     app.axis_defs.visible.clear();
+                    app.axis_defs.show_builtin_x = false;
+                    app.axis_defs.show_builtin_y = false;
+                    app.axis_defs.show_builtin_z = false;
                     changed = true;
                 }
 
                 if ui.button("Show All").clicked() {
                     for name in app.axis_defs.definitions.keys() {
-                        if app.axis_defs.visible.insert(name.clone()) {
+                        if app.axis_defs.visible.insert(name.clone())
+                            || !app.axis_defs.show_builtin_x
+                            || !app.axis_defs.show_builtin_y
+                            || !app.axis_defs.show_builtin_z
+                        {
+                            app.axis_defs.show_builtin_x = true;
+                            app.axis_defs.show_builtin_y = true;
+                            app.axis_defs.show_builtin_z = true;
                             changed = true;
                         }
                     }
+                }
+
+                use crate::color::{BUILTIN_X_COLOR, BUILTIN_Y_COLOR, BUILTIN_Z_COLOR};
+                let hex_to_color32 = |h: u32| {
+                    egui::Color32::from_rgb(
+                        (h >> 16) as u8,
+                        (h >> 8 & 0xFF) as u8,
+                        (h & 0xFF) as u8,
+                    )
+                };
+                let x_color = hex_to_color32(BUILTIN_X_COLOR);
+                let y_color = hex_to_color32(BUILTIN_Y_COLOR);
+                let z_color = hex_to_color32(BUILTIN_Z_COLOR);
+                if ui
+                    .add(
+                        Button::new(egui::RichText::new("X").color(x_color))
+                            .selected(app.axis_defs.show_builtin_x),
+                    )
+                    .clicked()
+                {
+                    app.axis_defs.show_builtin_x = !app.axis_defs.show_builtin_x;
+                    changed = true;
+                }
+                if ui
+                    .add(
+                        Button::new(egui::RichText::new("Y").color(y_color))
+                            .selected(app.axis_defs.show_builtin_y),
+                    )
+                    .clicked()
+                {
+                    app.axis_defs.show_builtin_y = !app.axis_defs.show_builtin_y;
+                    changed = true;
+                }
+                if ui
+                    .add(
+                        Button::new(egui::RichText::new("Z").color(z_color))
+                            .selected(app.axis_defs.show_builtin_z),
+                    )
+                    .clicked()
+                {
+                    app.axis_defs.show_builtin_z = !app.axis_defs.show_builtin_z;
+                    changed = true;
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1161,6 +1240,7 @@ pub fn build_axis_definitions_window(app: &mut PuzzleApp, ctx: &egui::Context) {
                                 target_axis,
                                 n,
                                 angle_range_deg,
+                                invert,
                             } => {
                                 ui.horizontal(|ui| {
                                     ui.label("Pattern Axis:");
@@ -1195,12 +1275,15 @@ pub fn build_axis_definitions_window(app: &mut PuzzleApp, ctx: &egui::Context) {
                                         .add(
                                             egui::DragValue::new(angle_range_deg)
                                                 .range(0.0..=360.0)
-                                                .speed(0.5)
+                                                .speed(1.0)
                                                 .fixed_decimals(1)
                                                 .suffix("°"),
                                         )
                                         .changed()
                                     {
+                                        changed = true;
+                                    }
+                                    if ui.checkbox(invert, "Reverse Direction").changed() {
                                         changed = true;
                                     }
                                 });
@@ -1226,7 +1309,8 @@ pub fn build_axis_definitions_window(app: &mut PuzzleApp, ctx: &egui::Context) {
         if let Some(three) = &app.three {
             let axes = app.build_axes();
             let def_vecs = app.axis_defs.get_visible_vectors();
-            three.update_axis_indicators(&axes, app.params.show_axes, &def_vecs);
+            let builtin_axes = app.axis_defs.get_visible_builtin_axes();
+            three.update_axis_indicators(&axes, app.params.show_axes, &def_vecs, &builtin_axes);
         }
     }
 }

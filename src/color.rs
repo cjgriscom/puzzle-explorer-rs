@@ -45,6 +45,10 @@ pub fn color_to_hex(c: &[f32; 3]) -> u32 {
 pub const ARC_COLOR: u32 = 0xeeeeee;
 pub const SPHERE_COLOR: u32 = 0x1a1a1a;
 
+pub const BUILTIN_X_COLOR: u32 = 0xFF8080;
+pub const BUILTIN_Y_COLOR: u32 = 0x80FF80;
+pub const BUILTIN_Z_COLOR: u32 = 0x8080FF;
+
 // https://stackoverflow.com/questions/3942878/how-to-decide-font-color-in-white-or-black-depending-on-background-color/3943023#3943023
 pub fn get_contrast_color(r: u8, g: u8, b: u8) -> String {
     // Calculate relative luminance

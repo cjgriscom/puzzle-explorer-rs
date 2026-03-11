@@ -1,7 +1,7 @@
 use crate::circle::{Arc, Circle};
 use crate::math::{PI, TAU, norm_ang};
 use glam::DVec3;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 const AUTO_MAX_ITERS: usize = 35;
 pub struct Interval {
@@ -147,6 +147,63 @@ pub fn same_circle(c1: &Circle, c2: &Circle) -> bool {
 
 pub fn find_circ(list: &[Circle], circ: &Circle) -> Option<usize> {
     list.iter().position(|c| same_circle(c, circ))
+}
+
+/// Attempt to derive the geometric parameters used to generate a dihedral
+/// angle given the angle and a small epsilon to allow for rounding errors
+///
+/// Alternatively this can be used to find fudged axis angles by specifying a
+/// reasonably large epsilon.
+///
+/// cos(t) = (cos(pi*a)*cos(pi*b) - cos(pi*p/q)) / (sin(pi*a)*sin(pi*b))
+/// p/q = acos((cos(pi*a)*cos(pi*b) - sin(pi*a)*sin(pi*b)*cos(t)) / (sin(pi*a)*sin(pi*b))) / pi
+pub fn invert_axis_angle(axis_angle_rad: f64, epsilon: f64) -> Vec<(u32, u32, u32, u32, f64)> {
+    // sweep a and b [2,8], then solve for p and q and check for close integer fractions
+    let mut results = Vec::new();
+    for a in 2..=8 {
+        for b in a..=8 {
+            let cos_t = axis_angle_rad.cos();
+            let sin_pi_a = (PI / a as f64).sin();
+            let sin_pi_b = (PI / b as f64).sin();
+            let cos_pi_a = (PI / a as f64).cos();
+            let cos_pi_b = (PI / b as f64).cos();
+            let cos_p_q = cos_pi_a * cos_pi_b - sin_pi_a * sin_pi_b * cos_t;
+            if !(-1.0 - 1e-9..=1.0 + 1e-9).contains(&cos_p_q) {
+                continue;
+            }
+            let p_q = cos_p_q.clamp(-1.0, 1.0).acos() / PI;
+            let mut pq_checked = HashSet::new();
+
+            // sweep denominators [2,15] and round the numerator, feed back into equation
+            for q in 2..=15 {
+                // if the result is within epsilon of the original axis angle, add to results
+                let p = (p_q * q as f64).round() as u32;
+                if !(1..=15).contains(&p) {
+                    continue;
+                }
+                let derived_axis_angle = derive_axis_angle(a, b, p, q);
+                if let Some(derived_axis_angle) = derived_axis_angle
+                    && pq_checked.insert(((p as f64 / q as f64) * 100000f64).round() as u32)
+                {
+                    let diff = (derived_axis_angle - axis_angle_rad).abs();
+                    if diff < epsilon {
+                        results.push((a, b, p, q, diff));
+                    }
+                }
+            }
+        }
+    }
+    // Sort by epsilon
+    results.sort_by(|a, b| a.4.partial_cmp(&b.4).unwrap());
+    results
+}
+
+#[test]
+fn test_invert_axis_angle() {
+    let axis_angle_rad = 37.01656993f64.to_radians();
+    let epsilon = 1e-2;
+    let result = invert_axis_angle(axis_angle_rad, epsilon);
+    println!("result: {:?}", result);
 }
 
 /// Using the law of cosines, derive the dihedral angle between two faces

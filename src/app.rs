@@ -227,6 +227,7 @@ impl ThreeState {
         axes: &[Option<crate::puzzle::AxisDef>],
         puzzle_axes_visible: bool,
         def_vectors: &[glam::DVec3],
+        builtin_axes: &[(glam::DVec3, u32)],
     ) {
         crate::three::dispose_group_children(&self.axis_group);
         let len = DISP_R as f32 * 1.3;
@@ -239,6 +240,15 @@ impl ThreeState {
                 [d.x as f32 * len, d.y as f32 * len, d.z as f32 * len],
             ];
             self.add_line_to_group(&self.axis_group, &points, 1.0, false, grey);
+        }
+        // Render visible builtin reference axes in their designated colors
+        for (v, color) in builtin_axes {
+            let d = v.normalize();
+            let points = [
+                [0.0, 0.0, 0.0],
+                [d.x as f32 * len, d.y as f32 * len, d.z as f32 * len],
+            ];
+            self.add_line_to_group(&self.axis_group, &points, 1.0, false, *color);
         }
         if !puzzle_axes_visible {
             return;
@@ -867,7 +877,13 @@ impl eframe::App for PuzzleApp {
                         three.update_geometry(&data);
                         let axes = self.build_axes();
                         let def_vecs = self.axis_defs.get_visible_vectors();
-                        three.update_axis_indicators(&axes, self.params.show_axes, &def_vecs);
+                        let builtin_axes = self.axis_defs.get_visible_builtin_axes();
+                        three.update_axis_indicators(
+                            &axes,
+                            self.params.show_axes,
+                            &def_vecs,
+                            &builtin_axes,
+                        );
                     }
                     self.stored_geometry = Some(data);
 
