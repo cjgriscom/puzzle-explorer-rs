@@ -1,9 +1,9 @@
-use crate::gui::CONTROLS_POS;
+use crate::{PuzzleApp, gui::CONTROLS_POS};
 
-pub fn build_controls_window(ctx: &egui::Context, open: &mut bool) {
+pub fn build_controls_window(app: &mut PuzzleApp, ctx: &egui::Context) {
     egui::Window::new("Controls")
         .default_pos(CONTROLS_POS)
-        .open(open)
+        .open(&mut app.window_state.show_controls)
         .show(ctx, |ui| {
             ui.label("Mouse controls:");
             ui.label("- Left-drag: rotate sphere");

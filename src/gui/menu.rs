@@ -12,6 +12,12 @@ pub fn build_menu_bar(app: &mut PuzzleApp, ctx: &egui::Context) {
                     if ui.button("Measure Axis Angle").clicked() {
                         app.window_state.show_measure_axis_angle = true;
                     }
+                    ui.separator();
+                    ui.add_enabled_ui(!app.window_state.show_gap_console, |ui| {
+                        if ui.button("Show Gap Console").clicked() {
+                            app.window_state.show_gap_console = true;
+                        }
+                    });
                 });
                 ui.menu_button("Help", |ui| {
                     if ui.button("Mouse/Keyboard Controls").clicked() {

@@ -3,12 +3,22 @@ use std::collections::{HashMap, HashSet};
 use glam::DVec3;
 
 /// Closable window states
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct WindowState {
     pub show_controls: bool,
     pub show_measure_axis_angle: bool,
+    pub show_gap_console: bool,
 }
 
+impl Default for WindowState {
+    fn default() -> Self {
+        Self {
+            show_controls: false,
+            show_measure_axis_angle: false,
+            show_gap_console: true,
+        }
+    }
+}
 /// Axis entry in puzzle params
 #[derive(Clone, Debug, PartialEq)]
 pub struct AxisEntry {

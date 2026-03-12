@@ -37,7 +37,7 @@ pub const AXIS_ANGLE_DECIMALS: usize = 4;
 
 pub fn build_windows(app: &mut PuzzleApp, ctx: &egui::Context) {
     menu::build_menu_bar(app, ctx);
-    controls::build_controls_window(ctx, &mut app.window_state.show_controls);
+    controls::build_controls_window(app, ctx);
     measure_axis_angle::build_measure_axis_angle_window(app, ctx);
     gap_console::build_gap_console_window(app, ctx);
 

@@ -14,6 +14,7 @@ pub fn build_gap_console_window(app: &mut PuzzleApp, ctx: &egui::Context) {
         .default_pos(GAP_CONSOLE_POS)
         .default_width(GAP_CONSOLE_WIDTH)
         .default_open(false)
+        .open(&mut app.window_state.show_gap_console)
         .show(ctx, |ui| match &app.gap_manager.state {
             GapState::NotStarted => {
                 ui.label("GAP is not started.");
