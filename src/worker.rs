@@ -9,6 +9,7 @@ use wasm_bindgen::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::app::{AxisDef, cvt_axis_defs};
+use crate::types::FudgedModeSettings;
 
 #[wasm_bindgen]
 pub fn worker_handle_msg(msg: JsValue) -> JsValue {
@@ -55,9 +56,7 @@ pub fn worker_handle_msg(msg: JsValue) -> JsValue {
         WorkerMessage::ComputeOrbits {
             axes,
             max_iterations_cap,
-            fudged_mode,
-            min_piece_angle_deg,
-            min_piece_perimeter,
+            fudged_mode_settings,
         } => {
             let axes = cvt_axis_defs(&axes);
             if axes.is_empty() {
@@ -71,12 +70,12 @@ pub fn worker_handle_msg(msg: JsValue) -> JsValue {
                     circles: &circles,
                     arcs: &arcs,
                     axes: &axes,
-                    options: match fudged_mode {
-                        true => PolygonOptions::FudgedMode {
-                            min_piece_angle_rad: Some(min_piece_angle_deg.to_radians()),
-                            min_piece_perimeter,
+                    options: match fudged_mode_settings {
+                        Some(settings) => PolygonOptions::FudgedMode {
+                            min_piece_angle_rad: Some(settings.min_piece_angle_deg.to_radians()),
+                            min_piece_perimeter: settings.min_piece_perimeter,
                         },
-                        false => PolygonOptions::Default,
+                        None => PolygonOptions::Default,
                     },
                 }) {
                     Ok(a) => a,
@@ -125,9 +124,7 @@ pub enum WorkerMessage {
     ComputeOrbits {
         axes: Vec<Option<AxisDef>>,
         max_iterations_cap: Option<u32>,
-        fudged_mode: bool,
-        min_piece_angle_deg: f32,
-        min_piece_perimeter: f64,
+        fudged_mode_settings: Option<FudgedModeSettings>,
     },
 }
 

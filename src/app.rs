@@ -14,8 +14,10 @@ use puzzle_explorer_math::math::TAU;
 
 use crate::color::*;
 use crate::dreadnaut::DreadnautManager;
+use crate::examples::default_example;
 use crate::gap::GapManager;
 use crate::input::{CameraInputState, handle_camera_input};
+use crate::puzzle_io::PuzzleExport;
 use crate::three::{
     BufferAttribute, BufferGeometry, CanvasTexture, Group, Line, LineBasicMaterial, LineLoop, Mesh,
     MeshBasicMaterial, PerspectiveCamera, Quaternion, Scene, SphereGeometry, Sprite,
@@ -555,6 +557,13 @@ pub struct PuzzleApp {
     pub(crate) gap_manager: GapManager,
     pub(crate) gap_input: String,
 
+    // Title of the puzzle
+    pub(crate) puzzle_name: Option<String>,
+    // Text buffer for editing puzzle name
+    pub(crate) puzzle_name_edit: Option<String>,
+    // Awaiting response from load dialog
+    pub(crate) pending_import: Rc<RefCell<Option<(String, String)>>>, // (filename_without_ext, yaml_content)
+
     request_counter: usize,
     pending_dreadnaut_requests: HashMap<usize, (usize, usize)>, // req_id -> (orbit_index, geometry_index)
     pub(crate) pending_gap_requests: HashMap<usize, String>,    // req_id -> dreadnaut hash
@@ -628,6 +637,10 @@ impl PuzzleApp {
             gap_manager: GapManager::new(),
             gap_input: String::new(),
 
+            puzzle_name: None,
+            puzzle_name_edit: None,
+            pending_import: Rc::new(RefCell::new(None)),
+
             request_counter: 0,
             pending_dreadnaut_requests: HashMap::new(),
             pending_gap_requests: HashMap::new(),
@@ -635,13 +648,40 @@ impl PuzzleApp {
             gap_cache: HashMap::new(),
         };
 
-        // Resolve default axis definitions before default puzzle params
-        app.axis_defs.resolve_all();
+        // Resolve default axis definitions before starting worker
+        if let Some(yaml) = default_example().to_yaml() {
+            let import_result = app.apply_import(default_example().name.to_string(), yaml);
+            if let Err(e) = import_result {
+                let _ = window().unwrap().alert_with_message(&e);
+            } else {
+                app.axis_defs.resolve_all();
+            }
+        }
         app.init_worker(&build_hash);
         app.dreadnaut_data.init(cc.egui_ctx.clone());
         app.gap_manager.init(cc.egui_ctx.clone());
         app.spawn_geometry_worker();
         app
+    }
+
+    /// Apply imported yml onto existing GUI state
+    pub fn apply_import(&mut self, base_name: String, yaml: String) -> Result<(), String> {
+        match PuzzleExport::from_yaml(&yaml) {
+            Ok(export) => {
+                self.params.apply_imported(&export.params);
+                self.axis_defs.apply_imported(&export.axis_defs);
+                self.orbit_state.apply_imported(&export.orbit_state);
+                self.puzzle_name = export
+                    .puzzle_name
+                    .filter(|s| !s.trim().is_empty())
+                    .or(Some(base_name));
+                self.axis_defs.resolve_all();
+                self.sync_n_match();
+                self.spawn_geometry_worker();
+                Ok(())
+            }
+            Err(e) => Err(format!("Import error: {}", e)),
+        }
     }
 
     /// Sync n values from CosineRule definitions when n_match is enabled
@@ -780,7 +820,7 @@ impl PuzzleApp {
             if let Some(dir) = direction {
                 let d = dir.normalize();
                 axes.push(Some(AxisDef {
-                    colat: entry.colat,
+                    colat: entry.colatitude_deg,
                     direction: [d.x, d.y, d.z],
                     n: entry.n,
                 }));
@@ -818,9 +858,10 @@ impl PuzzleApp {
         self.post_message(WorkerMessage::ComputeOrbits {
             axes,
             max_iterations_cap: self.max_iterations_cap_override(),
-            fudged_mode: self.orbit_state.fudged_mode,
-            min_piece_angle_deg: self.orbit_state.min_piece_angle_deg,
-            min_piece_perimeter: self.orbit_state.min_piece_perimeter,
+            fudged_mode_settings: match self.orbit_state.fudged_mode {
+                true => Some(self.orbit_state.fudged_mode_settings.clone()),
+                false => None,
+            },
         });
     }
 
@@ -906,6 +947,22 @@ impl PuzzleApp {
 
 impl eframe::App for PuzzleApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // -- Pending YML import ---
+        let pending_data = {
+            if let Ok(mut pending) = self.pending_import.try_borrow_mut() {
+                pending.take()
+            } else {
+                None
+            }
+        };
+        if let Some((base_name, yaml)) = pending_data {
+            self.apply_import(base_name, yaml).unwrap_or_else(|e| {
+                // JS error alert
+                let _ = window().unwrap().alert_with_message(&e);
+                *self.compute_output.borrow_mut() = e;
+            });
+        }
+
         // -- Animation ---
         if self.anim.is_some() {
             self.update_animation();
@@ -1071,7 +1128,7 @@ impl eframe::App for PuzzleApp {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AxisDef {
-    pub colat: f32,          // colatitude in degrees
+    pub colat: f32,          // colatitude_deg in degrees
     pub direction: [f64; 3], // unit direction vector
     pub n: u32,              // rotational symmetry order
 }

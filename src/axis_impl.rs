@@ -1,4 +1,4 @@
-use crate::types::{AxisDefinitions, DerivedAxis};
+use crate::types::{AxisDefinition, AxisDefinitions, DerivedAxis};
 use std::collections::{HashMap, HashSet};
 
 use glam::{DAffine3, DVec3};
@@ -65,19 +65,17 @@ impl DerivedAxis {
                 n_b,
                 a_axis,
                 perpendicular_axis,
-                manual_axis_angle,
-                manual_axis_angle_deg,
+                manual_axis_angle_deg: manual_axis_angle,
             } => {
                 let a_vec = resolve_norm_reference(axis_map, a_axis)?;
                 let perp_vec = resolve_norm_reference(axis_map, perpendicular_axis)?;
                 if a_vec.cross(perp_vec).length_squared() < 1e-12 {
                     return Err("A axis and perpendicular axis are parallel".to_string());
                 }
-                let angle = if *manual_axis_angle {
-                    manual_axis_angle_deg.to_radians()
-                } else {
-                    derive_axis_angle(*n_a, *n_b, *p, *q)
-                        .ok_or_else(|| "Failed to derive axis angle".to_string())?
+                let angle = match manual_axis_angle {
+                    Some(manual_axis_angle_deg) => manual_axis_angle_deg.to_radians(),
+                    None => derive_axis_angle(*n_a, *n_b, *p, *q)
+                        .ok_or_else(|| "Failed to derive axis angle".to_string())?,
                 };
                 let rotation = DAffine3::from_axis_angle(perp_vec, angle);
                 let b_vec = rotation.transform_vector3(a_vec).normalize();
@@ -88,7 +86,7 @@ impl DerivedAxis {
                 target_axis,
                 n,
                 angle_range_deg,
-                invert,
+                invert_range: invert,
             } => {
                 if *n < 2 {
                     return Err("Expected n >= 2".to_string());
@@ -190,15 +188,14 @@ impl DerivedAxis {
                 n_b: 3,
                 a_axis: "X".to_string(),
                 perpendicular_axis: "Y".to_string(),
-                manual_axis_angle: false,
-                manual_axis_angle_deg: 0.0,
+                manual_axis_angle_deg: None,
             },
             6 => DerivedAxis::CircularPattern {
                 pattern_axis: "Z".to_string(),
                 target_axis: "X".to_string(),
                 n: 3,
                 angle_range_deg: 360.0,
-                invert: false,
+                invert_range: false,
             },
             _ => DerivedAxis::Vector {
                 x: 1.0,
@@ -270,23 +267,23 @@ impl AxisDefinitions {
     pub fn get_definition(&self, name: &str) -> Option<&DerivedAxis> {
         self.definitions
             .iter()
-            .find(|(n, _)| n == name)
-            .map(|(_, a)| a)
+            .find(|d| d.name == name)
+            .map(|d| &d.axis)
     }
 
     pub fn get_definition_mut(&mut self, name: &str) -> Option<&mut DerivedAxis> {
         self.definitions
             .iter_mut()
-            .find(|(n, _)| n == name)
-            .map(|(_, a)| a)
+            .find(|d| d.name == name)
+            .map(|d| &mut d.axis)
     }
 
     pub fn contains_definition(&self, name: &str) -> bool {
-        self.definitions.iter().any(|(n, _)| n == name)
+        self.definitions.iter().any(|d| d.name == name)
     }
 
     pub fn definitions_keys(&self) -> Vec<String> {
-        self.definitions.iter().map(|(n, _)| n.clone()).collect()
+        self.definitions.iter().map(|d| d.name.clone()).collect()
     }
 
     /// Resolve axes with cycle detection
@@ -307,16 +304,16 @@ impl AxisDefinitions {
             in_degree.insert(name.clone(), 0);
         }
 
-        for (name, axis) in &self.definitions {
+        for d in &self.definitions {
             let mut base_deps: HashSet<String> = HashSet::new();
-            for dep in axis.dependencies() {
+            for dep in d.axis.dependencies() {
                 // TODO Strip sub-index suffix... ideally this should resolve to the base in a better way
                 let base = strip_sub_index(&dep);
                 if !builtins.contains(&base) && self.contains_definition(&base) {
                     base_deps.insert(base);
                 }
             }
-            in_degree.insert(name.clone(), base_deps.len());
+            in_degree.insert(d.name.clone(), base_deps.len());
         }
 
         let mut queue: Vec<String> = Vec::new();
@@ -329,20 +326,20 @@ impl AxisDefinitions {
         let mut resolved_order: Vec<String> = Vec::new();
         while let Some(name) = queue.pop() {
             resolved_order.push(name.clone());
-            for (other_name, other_axis) in &self.definitions {
-                if in_degree.get(other_name).copied().unwrap_or(0) == 0 {
+            for other_d in &self.definitions {
+                if in_degree.get(&other_d.name).copied().unwrap_or(0) == 0 {
                     continue;
                 }
-                let deps = other_axis.dependencies();
+                let deps = other_d.axis.dependencies();
                 let depends_on_name = deps.iter().any(|d| {
                     let base = strip_sub_index(d);
                     base == name
                 });
                 if depends_on_name {
-                    let deg = in_degree.get_mut(other_name).unwrap();
+                    let deg = in_degree.get_mut(&other_d.name).unwrap();
                     *deg = deg.saturating_sub(1);
                     if *deg == 0 {
-                        queue.push(other_name.clone());
+                        queue.push(other_d.name.clone());
                     }
                 }
             }
@@ -379,15 +376,15 @@ impl AxisDefinitions {
     /// Returns all axis names available for reference in dropdown lists
     pub fn available_axis_names(&self) -> Vec<String> {
         let mut names = vec!["X".to_string(), "Y".to_string(), "Z".to_string()];
-        for (name, axis) in &self.definitions {
-            match self.resolved.get(name) {
+        for d in &self.definitions {
+            match self.resolved.get(&d.name) {
                 Some(Ok(vecs)) if vecs.len() > 1 => {
-                    for suffix in axis.output_suffixes() {
-                        names.push(format!("{}_{}", name, suffix));
+                    for suffix in d.axis.output_suffixes() {
+                        names.push(format!("{}_{}", d.name, suffix));
                     }
                 }
                 _ => {
-                    names.push(name.clone());
+                    names.push(d.name.clone());
                 }
             }
         }
@@ -448,11 +445,11 @@ impl AxisDefinitions {
     /// rendering construction axes
     pub fn get_visible_vectors(&self) -> Vec<DVec3> {
         let mut vecs = Vec::new();
-        for (name, _axis) in &self.definitions {
-            if !self.visible.contains(name) {
+        for d in &self.definitions {
+            if !self.visible_axes.contains(&d.name) {
                 continue;
             }
-            if let Some(Ok(result_vecs)) = self.resolved.get(name) {
+            if let Some(Ok(result_vecs)) = self.resolved.get(&d.name) {
                 for v in result_vecs {
                     vecs.push(*v);
                 }
@@ -465,13 +462,13 @@ impl AxisDefinitions {
     pub fn get_visible_builtin_axes(&self) -> Vec<(DVec3, u32)> {
         use crate::color::{BUILTIN_X_COLOR, BUILTIN_Y_COLOR, BUILTIN_Z_COLOR};
         let mut result = Vec::new();
-        if self.show_builtin[0] {
+        if self.visible_axes.contains("X") {
             result.push((DVec3::X, BUILTIN_X_COLOR));
         }
-        if self.show_builtin[1] {
+        if self.visible_axes.contains("Y") {
             result.push((DVec3::Y, BUILTIN_Y_COLOR));
         }
-        if self.show_builtin[2] {
+        if self.visible_axes.contains("Z") {
             result.push((DVec3::Z, BUILTIN_Z_COLOR));
         }
         result
@@ -490,8 +487,12 @@ impl AxisDefinitions {
         format!("Axis {}", max_n + 1)
     }
 
+    pub(crate) fn get_builtin_axis_names(&self) -> Vec<String> {
+        vec!["X".to_string(), "Y".to_string(), "Z".to_string()]
+    }
+
     pub(crate) fn make_unique_name(&self, desired: &str) -> String {
-        let builtins: HashSet<&str> = ["X", "Y", "Z"].into();
+        let builtins: HashSet<String> = self.get_builtin_axis_names().into_iter().collect();
         if !builtins.contains(desired) && !self.contains_definition(desired) {
             return desired.to_string();
         }
@@ -507,16 +508,16 @@ impl AxisDefinitions {
 
     pub(crate) fn find_dependents(&self, target_name: &str) -> Vec<String> {
         let mut result = Vec::new();
-        for (name, axis) in &self.definitions {
-            if name == target_name {
+        for d in &self.definitions {
+            if d.name == target_name {
                 continue;
             }
-            let deps = axis.dependencies();
+            let deps = d.axis.dependencies();
             if deps.iter().any(|d| {
                 let base = strip_sub_index(d);
                 base == target_name
             }) {
-                result.push(name.clone());
+                result.push(d.name.clone());
             }
         }
         result
@@ -527,16 +528,19 @@ impl AxisDefinitions {
             return;
         }
         let mut new_defs = Vec::new();
-        for (k, v) in self.definitions.drain(..) {
-            if k == old_name {
-                new_defs.push((new_name.to_string(), v));
+        for d in self.definitions.drain(..) {
+            if d.name == old_name {
+                new_defs.push(AxisDefinition {
+                    name: new_name.to_string(),
+                    axis: d.axis.clone(),
+                });
             } else {
-                new_defs.push((k, v));
+                new_defs.push(d);
             }
         }
         self.definitions = new_defs;
-        if self.visible.remove(old_name) {
-            self.visible.insert(new_name.to_string());
+        if self.visible_axes.remove(old_name) {
+            self.visible_axes.insert(new_name.to_string());
         }
         let suffixes = self
             .get_definition(new_name)
@@ -555,8 +559,8 @@ impl AxisDefinitions {
     }
 
     pub(crate) fn delete(&mut self, name: &str) {
-        self.definitions.retain(|(n, _)| n != name);
-        self.visible.remove(name);
+        self.definitions.retain(|d| d.name != name);
+        self.visible_axes.remove(name);
     }
 }
 

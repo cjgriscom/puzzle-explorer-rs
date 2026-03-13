@@ -7,7 +7,7 @@ use crate::gui::{
     AXIS_ANGLE_DECIMALS, AXIS_ANGLE_SPEED, AXIS_DEFINITIONS_POS, AXIS_DEFINITIONS_WIDTH,
     EULER_DECIMALS, EULER_SPEED, axis_combo_box,
 };
-use crate::types::{DerivedAxis, PuzzleParams};
+use crate::types::{AxisDefinition, DerivedAxis, PuzzleParams};
 
 impl DerivedAxis {
     pub const VARIANT_LABELS: &[&str] = &[
@@ -75,18 +75,19 @@ pub fn build_axis_definitions_window(app: &mut PuzzleApp, ctx: &egui::Context) {
         .show(ctx, |ui| {
             // Toolbar
             ui.horizontal(|ui| {
-                if ui.button("Hide All").clicked() && !app.axis_defs.visible.is_empty() {
-                    app.axis_defs.visible.clear();
-                    app.axis_defs.show_builtin = [false; 3];
+                if ui.button("Hide All").clicked() && !app.axis_defs.visible_axes.is_empty() {
+                    app.axis_defs.visible_axes.clear();
                     changed = true;
                 }
 
                 if ui.button("Show All").clicked() {
                     for name in app.axis_defs.definitions_keys() {
-                        if app.axis_defs.visible.insert(name.clone())
-                            || app.axis_defs.show_builtin.iter().any(|&b| !b)
-                        {
-                            app.axis_defs.show_builtin = [true; 3];
+                        if app.axis_defs.visible_axes.insert(name.clone()) {
+                            changed = true;
+                        }
+                    }
+                    for name in app.axis_defs.get_builtin_axis_names() {
+                        if app.axis_defs.visible_axes.insert(name) {
                             changed = true;
                         }
                     }
@@ -96,44 +97,34 @@ pub fn build_axis_definitions_window(app: &mut PuzzleApp, ctx: &egui::Context) {
                 let x_color = hex_to_color32(BUILTIN_X_COLOR);
                 let y_color = hex_to_color32(BUILTIN_Y_COLOR);
                 let z_color = hex_to_color32(BUILTIN_Z_COLOR);
-                if ui
-                    .add(
-                        Button::new(egui::RichText::new("X").color(x_color))
-                            .selected(app.axis_defs.show_builtin[0]),
-                    )
-                    .clicked()
-                {
-                    app.axis_defs.show_builtin[0] = !app.axis_defs.show_builtin[0];
-                    changed = true;
-                }
-                if ui
-                    .add(
-                        Button::new(egui::RichText::new("Y").color(y_color))
-                            .selected(app.axis_defs.show_builtin[1]),
-                    )
-                    .clicked()
-                {
-                    app.axis_defs.show_builtin[1] = !app.axis_defs.show_builtin[1];
-                    changed = true;
-                }
-                if ui
-                    .add(
-                        Button::new(egui::RichText::new("Z").color(z_color))
-                            .selected(app.axis_defs.show_builtin[2]),
-                    )
-                    .clicked()
-                {
-                    app.axis_defs.show_builtin[2] = !app.axis_defs.show_builtin[2];
-                    changed = true;
+                let xyz_colors = [x_color, y_color, z_color];
+                let names = ["X", "Y", "Z"];
+                for (name, color) in names.iter().zip(xyz_colors.iter()) {
+                    let included = app.axis_defs.visible_axes.contains(*name);
+                    if ui
+                        .add(
+                            Button::new(egui::RichText::new(*name).color(*color))
+                                .selected(included),
+                        )
+                        .clicked()
+                    {
+                        if included {
+                            app.axis_defs.visible_axes.remove(*name);
+                        } else {
+                            app.axis_defs.visible_axes.insert(name.to_string());
+                        }
+                        changed = true;
+                    }
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("+ New Axis").clicked() {
                         let name = app.axis_defs.generate_name();
-                        app.axis_defs
-                            .definitions
-                            .push((name.clone(), DerivedAxis::default_for_variant(0)));
-                        app.axis_defs.visible.insert(name);
+                        app.axis_defs.definitions.push(AxisDefinition {
+                            name: name.clone(),
+                            axis: DerivedAxis::default_for_variant(0),
+                        });
+                        app.axis_defs.visible_axes.insert(name);
                         changed = true;
                     }
                 });
@@ -212,15 +203,15 @@ pub fn build_axis_definitions_window(app: &mut PuzzleApp, ctx: &egui::Context) {
                             }
 
                             // Visible toggle
-                            let is_visible = app.axis_defs.visible.contains(name);
+                            let is_visible = app.axis_defs.visible_axes.contains(name);
                             if ui
                                 .add(Button::new("👁").selected(is_visible).frame(true))
                                 .clicked()
                             {
                                 if !is_visible {
-                                    app.axis_defs.visible.insert(name.clone());
+                                    app.axis_defs.visible_axes.insert(name.clone());
                                 } else {
-                                    app.axis_defs.visible.remove(name);
+                                    app.axis_defs.visible_axes.remove(name);
                                 }
                                 changed = true;
                             }
@@ -441,13 +432,12 @@ pub fn build_axis_definitions_window(app: &mut PuzzleApp, ctx: &egui::Context) {
                                 n_b,
                                 a_axis,
                                 perpendicular_axis,
-                                manual_axis_angle,
-                                manual_axis_angle_deg,
+                                manual_axis_angle_deg: manual_axis_angle,
                             } => {
                                 // Manual axis angle toggle
                                 ui.horizontal(|ui| {
                                     ui.label("Axis Angle:");
-                                    if *manual_axis_angle {
+                                    if let Some(manual_axis_angle_deg) = manual_axis_angle {
                                         ui.horizontal(|ui| {
                                             if ui
                                                 .add(
@@ -469,13 +459,18 @@ pub fn build_axis_definitions_window(app: &mut PuzzleApp, ctx: &egui::Context) {
                                         }
                                     }
                                     ui.separator();
-                                    if ui.add(crate::gui::toggle(manual_axis_angle)).changed() {
+                                    let mut is_manual_axis_angle = manual_axis_angle.is_some();
+                                    if ui
+                                        .add(crate::gui::toggle(&mut is_manual_axis_angle))
+                                        .changed()
+                                    {
                                         // When toggling on, populate from current p/q
-                                        if *manual_axis_angle
-                                            && let Some(ang) = derive_axis_angle(*n_a, *n_b, *p, *q)
-                                        {
-                                            *manual_axis_angle_deg =
-                                                (ang.to_degrees() * 10000.0).round() / 10000.0;
+                                        if is_manual_axis_angle {
+                                            let ang = derive_axis_angle(*n_a, *n_b, *p, *q)
+                                                .unwrap_or(0.0);
+                                            *manual_axis_angle = Some(ang.to_degrees());
+                                        } else {
+                                            *manual_axis_angle = None;
                                         }
                                         changed = true;
                                     }
@@ -497,7 +492,7 @@ pub fn build_axis_definitions_window(app: &mut PuzzleApp, ctx: &egui::Context) {
                                     {
                                         changed = true;
                                     }
-                                    if !*manual_axis_angle {
+                                    if manual_axis_angle.is_none() {
                                         ui.label("p:");
                                         if ui
                                             .add(egui::DragValue::new(p).range(1..=20).speed(0.02))
@@ -540,7 +535,7 @@ pub fn build_axis_definitions_window(app: &mut PuzzleApp, ctx: &egui::Context) {
                                 target_axis,
                                 n,
                                 angle_range_deg,
-                                invert,
+                                invert_range: invert,
                             } => {
                                 ui.horizontal(|ui| {
                                     ui.label("Pattern Axis:");

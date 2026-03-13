@@ -1,0 +1,33 @@
+version: 1
+puzzle_name: Biaxe
+params:
+  max_iterations: 30
+  lock_cuts: true
+  axes:
+  - axis_name: Biaxe_A
+    n: 4
+    colatitude_deg: 90.0
+    n_match: true
+    enabled: true
+  - axis_name: Biaxe_B
+    n: 4
+    colatitude_deg: 90.0
+    n_match: true
+    enabled: true
+axis_defs:
+  definitions:
+  - name: Biaxe
+    axis: !CosineRule
+      p: 1
+      q: 5
+      n_a: 4
+      n_b: 4
+      a_axis: X
+      perpendicular_axis: Y
+      manual_axis_angle_deg: null
+  visible_axes: []
+orbit_state:
+  fudged_mode: false
+  fudged_mode_settings:
+    min_piece_angle_deg: 5.0
+    min_piece_perimeter: 0.05

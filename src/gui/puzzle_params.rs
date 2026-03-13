@@ -64,9 +64,9 @@ pub fn build_puzzle_params_window(app: &mut PuzzleApp, ctx: &egui::Context) {
                     && app.params.lock_cuts
                 {
                     // Sync all colats to first axis
-                    if let Some(first_colat) = app.params.axes.first().map(|a| a.colat) {
+                    if let Some(first_colat) = app.params.axes.first().map(|a| a.colatitude_deg) {
                         for entry in &mut app.params.axes {
-                            entry.colat = first_colat;
+                            entry.colatitude_deg = first_colat;
                         }
                     }
                     changed = true;
@@ -79,9 +79,10 @@ pub fn build_puzzle_params_window(app: &mut PuzzleApp, ctx: &egui::Context) {
                     {
                         let mut new_entry = AxisEntry::default();
                         if app.params.lock_cuts
-                            && let Some(first_colat) = app.params.axes.first().map(|a| a.colat)
+                            && let Some(first_colat) =
+                                app.params.axes.first().map(|a| a.colatitude_deg)
                         {
-                            new_entry.colat = first_colat;
+                            new_entry.colatitude_deg = first_colat;
                         }
                         app.params.axes.push(new_entry);
                         changed = true;
@@ -258,7 +259,7 @@ pub fn build_puzzle_params_window(app: &mut PuzzleApp, ctx: &egui::Context) {
                             if ui
                                 .add(
                                     egui::Slider::new(
-                                        &mut app.params.axes[idx].colat,
+                                        &mut app.params.axes[idx].colatitude_deg,
                                         MIN_COLAT..=MAX_COLAT,
                                     )
                                     .smallest_positive(COLAT_STEP)
@@ -272,9 +273,9 @@ pub fn build_puzzle_params_window(app: &mut PuzzleApp, ctx: &egui::Context) {
                             {
                                 if app.params.lock_cuts {
                                     // Sync all colats from this slider
-                                    let new_colat = app.params.axes[idx].colat;
+                                    let new_colat = app.params.axes[idx].colatitude_deg;
                                     for entry in &mut app.params.axes {
-                                        entry.colat = new_colat;
+                                        entry.colatitude_deg = new_colat;
                                     }
                                 }
                                 changed = true;

@@ -1,0 +1,54 @@
+version: 1
+puzzle_name: Skyglobe Ultimate
+params:
+  max_iterations: 6
+  lock_cuts: true
+  axes:
+  - axis_name: Tet_A
+    n: 6
+    colatitude_deg: 79.2
+    n_match: false
+    enabled: true
+  - axis_name: Tet_B
+    n: 6
+    colatitude_deg: 79.2
+    n_match: false
+    enabled: true
+  - axis_name: Tet_Pattern_2
+    n: 6
+    colatitude_deg: 79.2
+    n_match: false
+    enabled: true
+  - axis_name: Tet_Pattern_3
+    n: 6
+    colatitude_deg: 79.2
+    n_match: false
+    enabled: true
+axis_defs:
+  definitions:
+  - name: Tet_A
+    axis: !Vector
+      x: 1.0
+      y: 1.0
+      z: 1.0
+  - name: Tet_B
+    axis: !Vector
+      x: 1.0
+      y: -1.0
+      z: -1.0
+  - name: Tet_Pattern
+    axis: !CircularPattern
+      pattern_axis: Tet_A
+      target_axis: Tet_B
+      n: 3
+      angle_range_deg: 360.0
+      invert_range: false
+  visible_axes:
+  - Tet_A
+  - Tet_B
+  - Tet_Pattern
+orbit_state:
+  fudged_mode: true
+  fudged_mode_settings:
+    min_piece_angle_deg: 8.75
+    min_piece_perimeter: 0.485

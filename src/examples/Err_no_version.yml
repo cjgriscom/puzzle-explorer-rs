@@ -1,0 +1,32 @@
+puzzle_name: Undectrix
+params:
+  max_iterations: 30
+  lock_cuts: true
+  axes:
+  - axis_name: Undectrix_A
+    n: 2
+    colatitude_deg: 106.9
+    n_match: true
+    enabled: true
+  - axis_name: Undectrix_B
+    n: 3
+    colatitude_deg: 106.9
+    n_match: true
+    enabled: true
+axis_defs:
+  definitions:
+  - name: Undectrix
+    axis: !CosineRule
+      p: 1
+      q: 4
+      n_a: 2
+      n_b: 3
+      a_axis: X
+      perpendicular_axis: Y
+      manual_axis_angle_deg: null
+  visible_axes: []
+orbit_state:
+  fudged_mode: false
+  fudged_mode_settings:
+    min_piece_angle_deg: 5.0
+    min_piece_perimeter: 0.05

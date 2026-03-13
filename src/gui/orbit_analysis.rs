@@ -79,7 +79,7 @@ pub fn build_orbit_analysis_window(app: &mut PuzzleApp, ctx: &egui::Context) {
                     ui.label("Min Piece Angle");
                     let changed = ui
                         .add(
-                            egui::DragValue::new(&mut app.orbit_state.min_piece_angle_deg)
+                            egui::DragValue::new(&mut app.orbit_state.fudged_mode_settings.min_piece_angle_deg)
                                 .range(0.1..=10.0)
                                 .speed(0.02)
                                 .suffix(" deg"),
@@ -94,7 +94,7 @@ pub fn build_orbit_analysis_window(app: &mut PuzzleApp, ctx: &egui::Context) {
                     ui.label("Min Piece Perimeter");
                     let changed = ui
                         .add(
-                            egui::DragValue::new(&mut app.orbit_state.min_piece_perimeter)
+                            egui::DragValue::new(&mut app.orbit_state.fudged_mode_settings.min_piece_perimeter)
                                 .range(0.0..=10.0)
                                 .speed(0.001),
                         )
