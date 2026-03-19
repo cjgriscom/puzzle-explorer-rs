@@ -1,14 +1,16 @@
 # puzzle-explorer
 
 A web application for twisty puzzle design and geometry analysis. 
-https://cjgriscom.github.io/puzzle-explorer/
+https://puzzle-explorer.chandler.io
 
-![Screenshot of puzzle-explorer](docs/Screenshot.png)
+![Screenshot of puzzle-explorer](docs/images/Readme_Screenshot.png)
 
 ## Key Features
 - Doctrinaire cut visualization for variable axis angles, cut depths, and symmetries
-- An online copy of GAP for performing group calculations
+- An in-browser [GAP](https://www.gap-system.org/) console for performing group calculations
 - Piece orbit analysis and automatic group labeling
+- Import and export puzzle definitions
+- Fudged geometry analysis (experimental)
 
 Under active development with lots more features planned - contributions are welcome!
 
@@ -34,7 +36,7 @@ Nauty and Traces are used via a WASM port of the Dreadnaut CLI. These algorithms
 - Included build: 2_9_3, commit 0dc23ca
 
 ### GAP
-Puzzle Explorer runs a copy of GAP to assign group labels to piece orbits.
+Puzzle Explorer uses GAP to assign group labels to piece orbits.
 - Homepage: https://www.gap-system.org/
 - WASM port: https://github.com/wangyenshu/gap-wasm
 - Included build: 4.16 (dev), commit 86d58ae
