@@ -17,14 +17,17 @@ mod worker;
 pub use app::PuzzleApp;
 pub use worker::worker_handle_msg;
 
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::wasm_bindgen;
+#[cfg(test)]
+mod test;
+
+#[cfg(test)]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 /// Entry point for the web application.
 ///
 /// Initializes the Egui app and binds it to the specified canvas ID.
 #[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
+#[wasm_bindgen::prelude::wasm_bindgen]
 pub async fn run_app(
     egui_canvas_id: String,
     three_canvas_id: String,

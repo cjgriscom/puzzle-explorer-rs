@@ -45,6 +45,17 @@ serde_yaml_ng = "0.10"
 serde-wasm-bindgen = "0.6.5"
 glam.workspace = true
 
+# Desktop-only
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+eframe = { version = "0.33", default-features = false, features = ["glow", "x11", "wayland"] }
+
+# Browser-only
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+eframe = { version = "0.33", default-features = false, features = ["glow"] }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
 [build-dependencies]
 chrono = "0.4"
 

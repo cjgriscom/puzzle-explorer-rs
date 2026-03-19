@@ -113,6 +113,7 @@ mod tests {
     use crate::math::{PI, TAU};
 
     #[test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
     fn test_arc_integral_vs_avg() {
         // Test that integral formula closely
         //   matches sampling algo with high number of samples

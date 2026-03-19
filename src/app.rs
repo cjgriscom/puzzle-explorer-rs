@@ -1,5 +1,6 @@
 use egui::Visuals;
 use glam::DVec3;
+use puzzle_explorer_math::canon;
 use serde::Deserialize;
 use serde::Serialize;
 use std::cell::RefCell;
@@ -610,6 +611,8 @@ impl PuzzleApp {
         }
         cc.egui_ctx.set_fonts(fonts);
 
+        let egui_ctx_0 = cc.egui_ctx.clone();
+
         let mut app = Self {
             build_hash: build_hash.clone(),
 
@@ -637,7 +640,7 @@ impl PuzzleApp {
             axis_defs: AxisDefinitions::default(),
             measure_axis_angle_state: MeasureAxisAngleWindowState::default(),
 
-            dreadnaut_data: DreadnautManager::new(),
+            dreadnaut_data: DreadnautManager::new(move || egui_ctx_0.request_repaint()),
             gap_manager: GapManager::new(),
             gap_input: String::new(),
 
@@ -662,7 +665,7 @@ impl PuzzleApp {
             }
         }
         app.init_worker(&build_hash);
-        app.dreadnaut_data.init(cc.egui_ctx.clone());
+        app.dreadnaut_data.init();
         app.gap_manager.init(cc.egui_ctx.clone());
         app.spawn_geometry_worker();
         app
@@ -1064,7 +1067,7 @@ impl eframe::App for PuzzleApp {
                             self.pending_dreadnaut_requests
                                 .insert(req_id, (oi, self.geometry_index));
 
-                            let script = DreadnautManager::construct_script(gens, n_vertices);
+                            let script = canon::orbit_graph_hash_script(gens, n_vertices);
                             dreadnaut_batch.push((req_id, script));
                         }
                     }

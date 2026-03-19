@@ -199,6 +199,7 @@ pub fn invert_axis_angle(axis_angle_rad: f64, epsilon: f64) -> Vec<(u32, u32, u3
 }
 
 #[test]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn test_invert_axis_angle() {
     let axis_angle_rad = 37.01656993f64.to_radians();
     let epsilon = 1e-2;

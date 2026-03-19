@@ -32,6 +32,12 @@ jobs:
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
+      - name: Install Chrome
+        uses: browser-actions/setup-chrome@v2
+
+      - name: Test
+        run: bash test-chrome-headless.sh --release
+
       - name: Build
         run: bash build.sh --release
 
