@@ -33,7 +33,6 @@ pub struct OrbitCanonizer {
     // Script generation
     generator_renumbered_bidirectional: Vec<Vec<Vec<usize>>>,
     n_vertices: usize,
-    midpoint_partitions: Vec<Vec<usize>>, // tmp axis -> midpoints
 
     // Result processing
     canonical_labels: Vec<usize>,
@@ -48,7 +47,7 @@ impl OrbitCanonizer {
         }
     }
 
-    fn sub_generate_input_graph(&self) -> (HashMap<usize, Vec<usize>>, Vec<Vec<usize>>, usize) {
+    fn sub_generate_input_graph(&self) -> (HashMap<usize, Vec<usize>>, usize) {
         let mut n_midpoints = 0;
         let mut midpoint_partitions = Vec::new();
         let mut edges: HashMap<usize, Vec<usize>> = HashMap::new();
@@ -89,7 +88,7 @@ impl OrbitCanonizer {
             }
         }
 
-        (edges, midpoint_partitions, n_midpoints)
+        (edges, n_midpoints)
     }
 
     /// Generate the script to send to dreadnaut
@@ -99,8 +98,7 @@ impl OrbitCanonizer {
             .add_inverse_operations() // add copies of each operation with cycles inverted to ensure symmetry
             .remove_isomorphic_operations(); // redundant operations will mess up the canonization
         self.n_vertices = n_vertices;
-        let (edges, midpoint_partitions, n_midpoints) = self.sub_generate_input_graph();
-        self.midpoint_partitions = midpoint_partitions;
+        let (edges, n_midpoints) = self.sub_generate_input_graph();
 
         let n_generators = self.generator_renumbered_bidirectional.len();
         let n_total = n_midpoints + self.n_vertices + n_generators;
