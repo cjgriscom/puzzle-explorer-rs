@@ -961,7 +961,9 @@ impl PuzzleApp {
                 three.group.remove(&anim.static_group);
                 three.group.remove(&anim.rot_group);
                 three.cut_group.set_visible(true);
-                three.face_group.set_visible(true);
+                three
+                    .face_group
+                    .set_visible(self.orbit_state.annotate_pieces);
             }
             self.spawn_geometry_worker();
         }
