@@ -1,0 +1,116 @@
+version: 1
+puzzle_name: Megaminx
+params:
+  max_iterations: 8
+  lock_cuts: true
+  axes:
+  - axis_name: Megaminx_1_1
+    n: 5
+    colatitude_deg: 48.1
+    n_match: false
+    enabled: true
+  - axis_name: Megaminx_2_1
+    n: 5
+    colatitude_deg: 48.1
+    n_match: false
+    enabled: true
+  - axis_name: Megaminx_2_2
+    n: 5
+    colatitude_deg: 48.1
+    n_match: false
+    enabled: true
+  - axis_name: Megaminx_2_3
+    n: 5
+    colatitude_deg: 48.1
+    n_match: false
+    enabled: true
+  - axis_name: Megaminx_2_4
+    n: 5
+    colatitude_deg: 48.1
+    n_match: false
+    enabled: true
+  - axis_name: Megaminx_2_5
+    n: 5
+    colatitude_deg: 48.1
+    n_match: false
+    enabled: true
+  - axis_name: Megaminx_3_2
+    n: 5
+    colatitude_deg: 48.1
+    n_match: false
+    enabled: true
+  - axis_name: Megaminx_3_3
+    n: 5
+    colatitude_deg: 48.1
+    n_match: false
+    enabled: true
+  - axis_name: Megaminx_3_5
+    n: 5
+    colatitude_deg: 48.1
+    n_match: false
+    enabled: true
+  - axis_name: Megaminx_4_2
+    n: 5
+    colatitude_deg: 48.1
+    n_match: false
+    enabled: true
+  - axis_name: Megaminx_4_3
+    n: 5
+    colatitude_deg: 48.1
+    n_match: false
+    enabled: true
+  - axis_name: Megaminx_4_4
+    n: 5
+    colatitude_deg: 48.1
+    n_match: false
+    enabled: true
+axis_defs:
+  definitions:
+  - name: Dodec
+    axis: !CosineRule
+      p: 1
+      q: 5
+      n_a: 5
+      n_b: 5
+      a_axis: X
+      perpendicular_axis: Y
+      manual_axis_angle_deg: null
+  - name: Centered
+    axis: !Average
+      axes:
+      - Dodec_A
+      - Dodec_B
+  - name: Megaminx_1
+    axis: !CircularPattern
+      pattern_axis: X
+      target_axis: Centered
+      n: 2
+      angle_range_deg: 360.0
+      invert_range: false
+  - name: Megaminx_2
+    axis: !CircularPattern
+      pattern_axis: Megaminx_1_1
+      target_axis: Megaminx_1_2
+      n: 5
+      angle_range_deg: 360.0
+      invert_range: false
+  - name: Megaminx_3
+    axis: !CircularPattern
+      pattern_axis: Megaminx_2_1
+      target_axis: Megaminx_2_2
+      n: 5
+      angle_range_deg: 360.0
+      invert_range: false
+  - name: Megaminx_4
+    axis: !CircularPattern
+      pattern_axis: Megaminx_1_1
+      target_axis: Megaminx_3_2
+      n: 5
+      angle_range_deg: 360.0
+      invert_range: false
+  visible_axes: []
+orbit_state:
+  fudged_mode: false
+  fudged_mode_settings:
+    min_piece_angle_deg: 5.0
+    min_piece_perimeter: 1.305

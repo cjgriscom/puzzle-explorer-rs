@@ -8,6 +8,7 @@ pub const EXAMPLES: &[Example] = &[
     ),
     Example::new("Biaxe", include_bytes!("examples/Biaxe.yml")),
     Example::new("Undectrix", include_bytes!("examples/Undectrix.yml")),
+    Example::new("Megaminx", include_bytes!("examples/Megaminx.yml")),
     Example::new(
         "Skyglobe Ultimate",
         include_bytes!("examples/Skyglobe Ultimate.yml"),
