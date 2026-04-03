@@ -35,8 +35,8 @@ puzzle-explorer-math.workspace = true
 wasm-bindgen = "0.2"
 js-sys = "0.3"
 web-sys = { version = "0.3", features = ["console", "Window", "Document", "HtmlCanvasElement", "CanvasRenderingContext2d", "Element", "Node", "HtmlElement", "Worker", "WorkerOptions", "MessageEvent", "Blob", "BlobPropertyBag", "Url", "File", "FileList", "FileReader", "HtmlInputElement", "HtmlAnchorElement", "Event", "EventTarget", "Performance", "ProgressEvent"] }
-egui = { version = "0.33", default-features = false }
-eframe = { version = "0.33", default-features = false, features = ["glow"] }
+egui = { version = "0.34.1", default-features = false }
+eframe = { version = "0.34.1", default-features = false, features = ["glow"] }
 log = "0.4"
 console_error_panic_hook = "0.1"
 console_log = "1.0"
@@ -48,11 +48,11 @@ glam.workspace = true
 
 # Desktop-only
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-eframe = { version = "0.33", default-features = false, features = ["glow", "x11", "wayland"] }
+eframe = { version = "0.34.1", default-features = false, features = ["glow", "x11", "wayland"] }
 
 # Browser-only
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-eframe = { version = "0.33", default-features = false, features = ["glow"] }
+eframe = { version = "0.34.1", default-features = false, features = ["glow"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

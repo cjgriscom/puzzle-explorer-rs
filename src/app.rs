@@ -971,7 +971,7 @@ impl PuzzleApp {
 }
 
 impl eframe::App for PuzzleApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // -- Pending YML import ---
         let pending_data = {
             if let Ok(mut pending) = self.pending_import.try_borrow_mut() {
@@ -994,7 +994,7 @@ impl eframe::App for PuzzleApp {
         }
 
         // -- 3D mouse / touch controls ---
-        handle_camera_input(ctx, &mut self.three, &mut self.camera_input);
+        handle_camera_input(ui, &mut self.three, &mut self.camera_input);
 
         if let Some(three) = &mut self.three {
             three.sync_resize();
@@ -1002,15 +1002,15 @@ impl eframe::App for PuzzleApp {
         }
 
         // Keyboard shortcuts for rotations (disabled while typing into text fields).
-        if !ctx.wants_keyboard_input() && self.anim.is_none() {
-            let shift = ctx.input(|i| i.modifiers.shift);
+        if !ui.egui_wants_keyboard_input() && self.anim.is_none() {
+            let shift = ui.input(|i| i.modifiers.shift);
             // A-Z for axis keybindings
             let extra_keys = egui::Key::ALL
                 .iter()
                 .skip(egui::Key::A as usize)
                 .take(self.params.axes.len());
             for (ki, key) in extra_keys.enumerate() {
-                if ctx.input(|i| i.key_pressed(*key)) {
+                if ui.input(|i| i.key_pressed(*key)) {
                     self.start_rotation(ki, !shift);
                 }
             }
@@ -1149,7 +1149,7 @@ impl eframe::App for PuzzleApp {
             self.orbit_state.groups_stale = false;
         }
 
-        crate::gui::build_windows(self, ctx);
+        crate::gui::build_windows(self, ui);
 
         if let Some(three) = &self.three
             && let Some(a) = self
@@ -1162,7 +1162,7 @@ impl eframe::App for PuzzleApp {
             three.update_measure_arc(self.window_state.show_measure_axis_angle, a, b);
         }
 
-        ctx.request_repaint();
+        ui.request_repaint();
     }
 
     fn clear_color(&self, _visuals: &Visuals) -> [f32; 4] {

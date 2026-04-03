@@ -13,7 +13,7 @@ pub fn handle_camera_input(
     three: &mut Option<ThreeState>,
     state: &mut CameraInputState,
 ) {
-    let pointer_over_ui = ctx.is_pointer_over_area();
+    let pointer_over_ui = ctx.is_pointer_over_egui();
     let multi_touch = ctx.input(|i| i.multi_touch());
     let any_touches = ctx.input(|i| i.any_touches());
     let using_multi_touch = !pointer_over_ui && multi_touch.is_some();
@@ -110,8 +110,10 @@ pub fn handle_camera_input(
         }
 
         if !using_multi_touch && !pointer_over_ui && !any_touches {
-            let scroll_y = ctx.input(|i| i.raw_scroll_delta.y);
-            if scroll_y != 0.0
+            let (is_scrolling, scroll_y) =
+                ctx.input(|i| (i.is_scrolling(), i.smooth_scroll_delta.y));
+            if is_scrolling
+                && scroll_y != 0.0
                 && let Some(three) = three.as_mut()
             {
                 three.zoom(scroll_y as f64);

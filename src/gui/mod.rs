@@ -46,8 +46,9 @@ pub const AXIS_ANGLE_DECIMALS: usize = 4;
 
 // --- Entry Point ---
 
-pub fn build_windows(app: &mut PuzzleApp, ctx: &egui::Context) {
-    menu::build_menu_bar(app, ctx);
+pub fn build_windows(app: &mut PuzzleApp, ui: &mut egui::Ui) {
+    menu::build_menu_bar(app, ui);
+    let ctx = ui.ctx();
     controls::build_controls_window(app, ctx);
     measure_axis_angle::build_measure_axis_angle_window(app, ctx);
     invert_axis_angle::build_invert_axis_angle_window(app, ctx);

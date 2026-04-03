@@ -8,8 +8,8 @@ use crate::puzzle_io::{
     PUZZLE_FORMAT_VERSION, PuzzleExport, trigger_download, trigger_file_picker,
 };
 
-pub fn build_menu_bar(app: &mut PuzzleApp, ctx: &egui::Context) {
-    egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
+pub fn build_menu_bar(app: &mut PuzzleApp, ui: &mut egui::Ui) {
+    egui::Panel::top("menu_bar").show_inside(ui, |ui| {
         egui::MenuBar::new()
             .config(MenuConfig::new().close_behavior(CloseOnClick))
             .ui(ui, |ui| {
