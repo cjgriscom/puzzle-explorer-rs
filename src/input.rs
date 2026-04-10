@@ -110,10 +110,16 @@ pub fn handle_camera_input(
         }
 
         if !using_multi_touch && !pointer_over_ui && !any_touches {
-            let (is_scrolling, scroll_y) =
-                ctx.input(|i| (i.is_scrolling(), i.smooth_scroll_delta.y));
-            if is_scrolling
-                && scroll_y != 0.0
+            let scroll_y = ctx.input(|i| {
+                let mut scroll_y = 0.0;
+                for event in i.raw.events.iter() {
+                    if let egui::Event::MouseWheel { delta, .. } = event {
+                        scroll_y += delta.y;
+                    }
+                }
+                scroll_y
+            });
+            if scroll_y != 0.0
                 && let Some(three) = three.as_mut()
             {
                 three.zoom(scroll_y as f64);
