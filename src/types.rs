@@ -254,4 +254,10 @@ pub enum DerivedAxis {
         angle_range_deg: f64,
         invert_range: bool,
     },
+    // Mirror target_axis across the plane defined by plane_axis_1 and plane_axis_2
+    Mirror {
+        target_axis: String,
+        plane_axis_1: String,
+        plane_axis_2: String,
+    },
 }

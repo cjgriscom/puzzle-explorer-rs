@@ -20,6 +20,7 @@ impl DerivedAxis {
         "Cosine Rule",
         "Third Axis",
         "Circular Pattern",
+        "Mirror",
     ];
 }
 
@@ -719,6 +720,43 @@ pub fn build_axis_definitions_window(app: &mut PuzzleApp, ctx: &egui::Context) {
                                         changed = true;
                                     }
                                     if ui.checkbox(invert, "Reverse Direction").changed() {
+                                        changed = true;
+                                    }
+                                });
+                            }
+                            DerivedAxis::Mirror {
+                                target_axis,
+                                plane_axis_1,
+                                plane_axis_2,
+                            } => {
+                                ui.horizontal(|ui| {
+                                    ui.label("Target Axis:");
+                                    if axis_combo_box(
+                                        ui,
+                                        &format!("mirror_tgt_{}", name),
+                                        target_axis,
+                                        &available,
+                                    ) {
+                                        changed = true;
+                                    }
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.label("Plane Axis 1:");
+                                    if axis_combo_box(
+                                        ui,
+                                        &format!("mirror_p1_{}", name),
+                                        plane_axis_1,
+                                        &available,
+                                    ) {
+                                        changed = true;
+                                    }
+                                    ui.label("Plane Axis 2:");
+                                    if axis_combo_box(
+                                        ui,
+                                        &format!("mirror_p2_{}", name),
+                                        plane_axis_2,
+                                        &available,
+                                    ) {
                                         changed = true;
                                     }
                                 });

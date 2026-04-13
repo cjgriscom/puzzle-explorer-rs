@@ -136,6 +136,25 @@ impl DerivedAxis {
                 }
                 Ok(results)
             }
+            DerivedAxis::Mirror {
+                target_axis,
+                plane_axis_1,
+                plane_axis_2,
+            } => {
+                let target_vec = resolve_norm_reference(axis_map, target_axis)?;
+                let p1 = resolve_norm_reference(axis_map, plane_axis_1)?;
+                let p2 = resolve_norm_reference(axis_map, plane_axis_2)?;
+                let normal = p1.cross(p2);
+                if normal.length_squared() < 1e-12 {
+                    return Err("Plane axes are parallel; cannot define a mirror plane".to_string());
+                }
+                let n = normal.normalize();
+                let reflected = target_vec - 2.0 * target_vec.dot(n) * n;
+                if reflected.length_squared() < 1e-12 {
+                    return Err("Mirror resulted in a zero vector".to_string());
+                }
+                Ok(vec![reflected.normalize()])
+            }
         }
     }
 
@@ -167,6 +186,17 @@ impl DerivedAxis {
             } => {
                 vec![pattern_axis.clone(), target_axis.clone()]
             }
+            DerivedAxis::Mirror {
+                target_axis,
+                plane_axis_1,
+                plane_axis_2,
+            } => {
+                vec![
+                    target_axis.clone(),
+                    plane_axis_1.clone(),
+                    plane_axis_2.clone(),
+                ]
+            }
         }
     }
 
@@ -190,6 +220,7 @@ impl DerivedAxis {
             DerivedAxis::CosineRule { .. } => 5,
             DerivedAxis::ThirdAxis { .. } => 6,
             DerivedAxis::CircularPattern { .. } => 7,
+            DerivedAxis::Mirror { .. } => 8,
         }
     }
 
@@ -244,6 +275,11 @@ impl DerivedAxis {
                 n: 3,
                 angle_range_deg: 360.0,
                 invert_range: false,
+            },
+            8 => DerivedAxis::Mirror {
+                target_axis: "Z".to_string(),
+                plane_axis_1: "X".to_string(),
+                plane_axis_2: "Y".to_string(),
             },
             _ => DerivedAxis::Vector {
                 x: 1.0,
@@ -305,6 +341,21 @@ impl DerivedAxis {
                 }
                 if target_axis == old_name {
                     *target_axis = new_name.to_string();
+                }
+            }
+            DerivedAxis::Mirror {
+                target_axis,
+                plane_axis_1,
+                plane_axis_2,
+            } => {
+                if target_axis == old_name {
+                    *target_axis = new_name.to_string();
+                }
+                if plane_axis_1 == old_name {
+                    *plane_axis_1 = new_name.to_string();
+                }
+                if plane_axis_2 == old_name {
+                    *plane_axis_2 = new_name.to_string();
                 }
             }
             _ => {}
